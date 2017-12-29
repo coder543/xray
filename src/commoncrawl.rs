@@ -3,16 +3,23 @@ use nom::{IResult, line_ending};
 
 /// A struct representing a single WET blob
 #[derive(Clone, Debug)]
-pub struct WetRef<'a> {
-    pub ref_type: &'a str,
-    pub url: &'a str,
-    pub date: &'a str,
-    pub filename: &'a str,
-    pub record_id: &'a str,
-    pub refers_to: &'a str,
-    pub block_digest: &'a str,
-    pub content_type: &'a str,
-    pub content: &'a [u8],
+pub enum WetRef<'a> {
+    WarcInfo {
+        date: &'a str,
+        filename: &'a str,
+        record_id: &'a str,
+        content_type: &'a str,
+        content: &'a [u8],
+    },
+    Conversion {
+        url: &'a str,
+        date: &'a str,
+        record_id: &'a str,
+        refers_to: &'a str,
+        block_digest: &'a str,
+        content_type: &'a str,
+        content: &'a [u8],
+    }
 }
 
 pub trait GetWetRef<'a> {
@@ -44,13 +51,12 @@ named!(take_line<&str>, map_res!(
     str::from_utf8
 ));
 
-named!(parse_type<&str>, preceded!(tag!("WARC-Type: "), take_line));
-named!(parse_url<&str>, alt!(preceded!(tag!("WARC-Target-URI: "), take_line) | value!("")));
+named!(parse_url<&str>, preceded!(tag!("WARC-Target-URI: "), take_line));
 named!(parse_date<&str>, preceded!(tag!("WARC-Date: "), take_line));
-named!(parse_filename<&str>, alt!(preceded!(tag!("WARC-Filename: "), take_line) | value!("")));
+named!(parse_filename<&str>, preceded!(tag!("WARC-Filename: "), take_line));
 named!(parse_record_id<&str>, preceded!(tag!("WARC-Record-ID: "), take_line));
-named!(parse_refers_to<&str>, alt!(preceded!(tag!("WARC-Refers-To: "), take_line) | value!("")));
-named!(parse_digest<&str>, alt!(preceded!(tag!("WARC-Block-Digest: "), take_line) | value!("")));
+named!(parse_refers_to<&str>, preceded!(tag!("WARC-Refers-To: "), take_line));
+named!(parse_digest<&str>, preceded!(tag!("WARC-Block-Digest: "), take_line));
 
 named!(parse_content_type<&str>, preceded!(tag!("Content-Type: "), take_line));
 named!(parse_content_length<u64>, map_res!(
@@ -58,12 +64,31 @@ named!(parse_content_length<u64>, map_res!(
     FromStr::from_str
 ));
 
-named!(parse_wet_ref<WetRef>, do_parse!(
-    pair!(tag!("WARC/1.0"), line_ending) >>
-    ref_type: parse_type >>
-    url: parse_url >>
+named!(parse_warcinfo<WetRef>, do_parse!(
+    pair!(tag!("WARC-Type: warcinfo"), line_ending) >>
     date: parse_date >>
     filename: parse_filename >>
+    record_id: parse_record_id >>
+    content_type: parse_content_type >>
+    content_length: parse_content_length >>
+    tag!("\r\n") >>
+    content: take!(content_length) >>
+    take_while!(is_whitespace) >>
+    (
+        WetRef::WarcInfo {
+            date,
+            filename,
+            record_id,
+            content_type,
+            content,
+        }
+    )
+));
+
+named!(parse_conversion<WetRef>, do_parse!(
+    pair!(tag!("WARC-Type: conversion"), line_ending) >>
+    url: parse_url >>
+    date: parse_date >>
     record_id: parse_record_id >>
     refers_to: parse_refers_to >>
     block_digest: parse_digest >>
@@ -73,11 +98,9 @@ named!(parse_wet_ref<WetRef>, do_parse!(
     content: take!(content_length) >>
     take_while!(is_whitespace) >>
     (
-        WetRef {
-            ref_type,
+        WetRef::Conversion {
             url,
             date,
-            filename,
             record_id,
             refers_to,
             block_digest,
@@ -85,4 +108,10 @@ named!(parse_wet_ref<WetRef>, do_parse!(
             content,
         }
     )
+));
+
+named!(parse_wet_ref<WetRef>, do_parse!(
+    pair!(tag!("WARC/1.0"), line_ending) >>
+    result: alt!(parse_conversion | parse_warcinfo) >>
+    (result)
 ));

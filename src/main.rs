@@ -9,6 +9,7 @@ use structopt::StructOpt;
 
 use std::process::exit;
 
+mod errors;
 mod commoncrawl;
 mod database;
 mod interactive;
@@ -52,7 +53,7 @@ fn main() {
 
     match result {
         Err(error) => {
-            eprintln!("Error: {}", error);
+            eprintln!("{}", error.0);
             exit(1)
         }
         _ => {}
