@@ -1,14 +1,15 @@
 extern crate rayon;
 extern crate rustyline;
 extern crate whatlang;
-
 extern crate structopt;
-#[macro_use]
-extern crate structopt_derive;
+#[macro_use] extern crate structopt_derive;
+#[macro_use] extern crate nom;
+
 use structopt::StructOpt;
 
 use std::process::exit;
 
+mod commoncrawl;
 mod database;
 mod interactive;
 mod search;
