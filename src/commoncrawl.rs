@@ -9,7 +9,7 @@ pub enum WetRef<'a> {
         filename: &'a str,
         record_id: &'a str,
         content_type: &'a str,
-        content: &'a [u8],
+        content: &'a str,
     },
     Conversion {
         url: &'a str,
@@ -18,7 +18,7 @@ pub enum WetRef<'a> {
         refers_to: &'a str,
         block_digest: &'a str,
         content_type: &'a str,
-        content: &'a [u8],
+        content: &'a str,
     }
 }
 
@@ -72,7 +72,7 @@ named!(parse_warcinfo<WetRef>, do_parse!(
     content_type: parse_content_type >>
     content_length: parse_content_length >>
     tag!("\r\n") >>
-    content: take!(content_length) >>
+    content: take_str!(content_length) >>
     take_while!(is_whitespace) >>
     (
         WetRef::WarcInfo {
@@ -95,7 +95,7 @@ named!(parse_conversion<WetRef>, do_parse!(
     content_type: parse_content_type >>
     content_length: parse_content_length >>
     tag!("\r\n") >>
-    content: take!(content_length) >>
+    content: take_str!(content_length) >>
     take_while!(is_whitespace) >>
     (
         WetRef::Conversion {
