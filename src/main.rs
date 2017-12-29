@@ -1,9 +1,11 @@
+#[macro_use]
+extern crate nom;
 extern crate rayon;
 extern crate rustyline;
-extern crate whatlang;
 extern crate structopt;
-#[macro_use] extern crate structopt_derive;
-#[macro_use] extern crate nom;
+#[macro_use]
+extern crate structopt_derive;
+extern crate whatlang;
 
 use structopt::StructOpt;
 
