@@ -1,16 +1,18 @@
 use std::fs::File;
 use std::io::Read;
 use std::time::Instant;
-use errors::StrError;
 
+use rayon::prelude::*;
+
+use errors::StrError;
 use database::Database;
 use commoncrawl::{WetRef, GetWetRef};
 
 impl Database {
     pub fn import(&mut self, sources: Vec<String>) -> Result<(), StrError> {
-        let mut count = 0;
         let now = Instant::now();
-        for source in sources {
+        let results = sources.into_par_iter().map(|source| {
+            let mut count = 0u64;
             let mut file = File::open(source)?;
             let content = &mut Vec::new();
             file.read_to_end(content)?;
@@ -24,10 +26,18 @@ impl Database {
                 // }
                 count += 1;
             }
-        }
+            Ok(count)
+        }).collect::<Vec<_>>();
         let elapsed = now.elapsed();
         let elapsed_time = elapsed.as_secs() as f64 + elapsed.subsec_nanos() as f64 / 1_000_000_000.0;
-        print!("{} records imported in {}s", count, elapsed_time);
+        let mut total = 0u64;
+        for result in results {
+            match result {
+                Ok(count) => total += count,
+                Err(error) => return Err(error),
+            }
+        }
+        print!("{} records imported in {}s", total, elapsed_time);
         Ok(())
     }
 }
