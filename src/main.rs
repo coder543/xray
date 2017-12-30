@@ -1,6 +1,7 @@
 #[macro_use]
 extern crate nom;
 extern crate rayon;
+extern crate rayon_hash;
 extern crate rustyline;
 extern crate structopt;
 #[macro_use]

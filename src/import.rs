@@ -1,16 +1,16 @@
-use std::fs::read_dir;
-use std::path::{Path, PathBuf};
 use std::fs::File;
+use std::fs::read_dir;
 use std::io::Read;
+use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use rayon::prelude::*;
 use whatlang::detect;
 
+use commoncrawl::{GetWetRef, WetRef};
+use database::Database;
 use database::Page;
 use errors::StrError;
-use database::Database;
-use commoncrawl::{GetWetRef, WetRef};
 use helpers::ReadableDuration;
 
 fn load_source(source: PathBuf) -> Result<Vec<(String, Page)>, StrError> {
@@ -21,6 +21,7 @@ fn load_source(source: PathBuf) -> Result<Vec<(String, Page)>, StrError> {
         let mut file = File::open(source)?;
         let content = &mut Vec::new();
         file.read_to_end(content)?;
+        content.shrink_to_fit();
 
         let mut remaining: &[u8] = content;
         while remaining.len() > 0 {
@@ -34,6 +35,8 @@ fn load_source(source: PathBuf) -> Result<Vec<(String, Page)>, StrError> {
             }
         }
     }
+
+    raw_pages.shrink_to_fit();
 
     let pages = raw_pages
         .into_par_iter()
@@ -79,12 +82,15 @@ impl Database {
 
         let now = Instant::now();
 
+        println!("loading sources");
         let results = sources
             .into_par_iter()
             .flat_map(path_to_files)
             .into_par_iter()
             .map(load_source)
             .collect::<Vec<_>>();
+
+        println!("sources loaded, now importing into database");
 
         for result in results {
             let pages = result?;
@@ -93,6 +99,8 @@ impl Database {
                 self.insert(url, page)
             }
         }
+
+        self.shrink();
 
         let elapsed = now.elapsed().readable();
 

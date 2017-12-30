@@ -1,7 +1,7 @@
-use rustyline;
-use rustyline::error::ReadlineError;
 use database::Database;
 use errors::StrError;
+use rustyline;
+use rustyline::error::ReadlineError;
 
 impl Database {
     pub fn interactive(&mut self) -> Result<(), StrError> {

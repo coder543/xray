@@ -1,3 +1,4 @@
+use std::ascii::AsciiExt;
 use std::time::Duration;
 
 pub trait ReadableDuration {
@@ -17,4 +18,29 @@ impl ReadableDuration for Duration {
             format!("{} secs", total)
         }
     }
+}
+
+pub fn canonicalize(word: &str) -> Option<String> {
+    if word.len() > 2 && word.len() < 12 {
+        let mut output = String::with_capacity(word.len());
+        word.chars()
+            .filter(is_canonical)
+            .flat_map(|c| c.to_lowercase())
+            .for_each(|c| output.push(c));
+        Some(output)
+    } else {
+        None
+    }
+}
+
+pub fn is_canonical(x: &char) -> bool {
+    let x = *x;
+    !(x == '.' || x == '\'' || x == '?' || x == '!' || x == ',')
+}
+
+pub fn canonical_eq(a: &str, b: &str) -> bool {
+    let a_iter = a.chars().filter(is_canonical);
+    let b_iter = b.chars().filter(is_canonical);
+
+    a_iter.zip(b_iter).all(|(a, b)| a.eq_ignore_ascii_case(&b))
 }
