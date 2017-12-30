@@ -55,12 +55,9 @@ fn main() {
         Xray::Stats => database.stats(),
     };
 
-    match result {
-        Err(error) => {
-            eprintln!("{}", error.0);
-            exit(1)
-        }
-        _ => {}
+    if let Err(error) = result {
+        eprintln!("{}", error.0);
+        exit(1)
     }
 
     database.interactive().unwrap();

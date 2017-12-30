@@ -46,8 +46,8 @@ impl Database {
         self.urls.reserve(len);
     }
 
-    fn index_words(&mut self, url: usize, page: &Page) -> bool {
-        let mut words = page.content.split_whitespace().collect::<Vec<_>>();
+    fn index_words(&mut self, url: usize, content: &str) -> bool {
+        let mut words = content.split_whitespace().collect::<Vec<_>>();
         words.par_sort_unstable();
         words.dedup_by(|&mut a, &mut b| canonical_eq(a, b));
 
@@ -60,10 +60,10 @@ impl Database {
             return false;
         }
 
-        for word in words.into_iter() {
+        for word in words {
             self.by_word
                 .entry(word)
-                .or_insert_with(|| HashSet::new())
+                .or_insert_with(HashSet::new)
                 .insert(url);
         }
 
@@ -74,16 +74,17 @@ impl Database {
         let uid = self.urls.len();
         self.urls.push(url);
 
+        let Page { content, lang } = page;
         // if the page doesn't contain at least 10 words,
         // then we don't care about it.
-        if !self.index_words(uid, &page) {
+        if !self.index_words(uid, &content) {
             self.urls.pop();
             return;
         }
 
         self.by_language
-            .entry(page.lang)
-            .or_insert_with(|| HashSet::new())
+            .entry(lang)
+            .or_insert_with(HashSet::new)
             .insert(uid);
     }
 
@@ -104,9 +105,15 @@ impl Database {
     pub fn query(&self, words: Vec<String>, lang: Option<Lang>) {
         let mut sets = words
             .into_iter()
+            .filter_map(|word| canonicalize(&word))
             .filter_map(|word| self.by_word.get(&word))
             .map(|x| x.to_owned())
             .collect::<Vec<_>>();
+
+        if sets.is_empty() {
+            println!("no matches found");
+            return;
+        }
 
         if let Some(lang) = lang {
             if let Some(lang_set) = self.by_language.get(&lang) {
@@ -118,7 +125,7 @@ impl Database {
         let set = iter.next().unwrap();
         let results = iter.fold(set, |set1, set2| &set1 & &set2)
             .iter()
-            .map(|&uid| self.urls.get(uid).unwrap())
+            .map(|&uid| &self.urls[uid])
             .collect::<Vec<_>>();
 
         println!("{} results", results.len());

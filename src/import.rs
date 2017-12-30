@@ -1,7 +1,7 @@
 use std::fs::File;
 use std::fs::read_dir;
 use std::io::Read;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::time::Instant;
 
 use rayon::prelude::*;
@@ -24,14 +24,11 @@ fn load_source(source: PathBuf) -> Result<Vec<(String, Page)>, StrError> {
         content.shrink_to_fit();
 
         let mut remaining: &[u8] = content;
-        while remaining.len() > 0 {
+        while !remaining.is_empty() {
             let (blob, rem) = remaining.next_wet_ref();
             remaining = rem;
-            match blob {
-                WetRef::Conversion { url, content, .. } => {
-                    raw_pages.push((url.to_string(), content.to_string()))
-                }
-                _ => {}
+            if let WetRef::Conversion { url, content, .. } = blob {
+                raw_pages.push((url.to_string(), content.to_string()))
             }
         }
     }
@@ -55,22 +52,21 @@ fn load_source(source: PathBuf) -> Result<Vec<(String, Page)>, StrError> {
 }
 
 fn path_to_files(path: String) -> Vec<PathBuf> {
-    let path = Path::new(&path);
+    let path = PathBuf::from(path);
     if path.is_file() {
-        return vec![path.to_owned()];
+        return vec![path];
     }
 
     let mut files = Vec::new();
-    match read_dir(path) {
-        Ok(dir) => for maybe_entry in dir {
-            for entry in maybe_entry {
+    if let Ok(dir) = read_dir(path) {
+        for entry in dir {
+            if let Ok(entry) = entry {
                 let entry = entry.path();
                 if entry.is_file() && entry.extension().map_or(false, |ext| ext == "wet") {
                     files.push(entry.to_owned());
                 }
             }
-        },
-        _ => {}
+        }
     }
 
     files

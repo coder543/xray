@@ -7,7 +7,7 @@ pub trait ReadableDuration {
 
 impl ReadableDuration for Duration {
     fn readable(&self) -> String {
-        let total = self.as_secs() as f64 + (self.subsec_nanos() as f64) / 1_000_000_000.0;
+        let total = self.as_secs() as f64 + f64::from(self.subsec_nanos()) / 1_000_000_000.0;
         if total < 0.000001 {
             format!("{} ns", total * 1000.0 * 1000.0 * 1000.0)
         } else if total < 0.001 {
