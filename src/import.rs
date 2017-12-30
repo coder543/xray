@@ -1,13 +1,13 @@
 use std::fs::read_dir;
 use std::path::{Path, PathBuf};
-use whatlang::detect;
-use database::Page;
 use std::fs::File;
 use std::io::Read;
 use std::time::Instant;
 
 use rayon::prelude::*;
+use whatlang::detect;
 
+use database::Page;
 use errors::StrError;
 use database::Database;
 use commoncrawl::{GetWetRef, WetRef};
@@ -101,6 +101,7 @@ impl Database {
             self.len() - starting_page_count,
             elapsed
         );
+
         Ok(())
     }
 }

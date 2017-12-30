@@ -5,7 +5,8 @@ use whatlang::Lang;
 use std::path::Path;
 
 pub struct Database {
-    pages: HashMap<String, Page>,
+    pages: HashMap<String, String>,
+    by_language: HashMap<Lang, Vec<String>>,
 }
 
 pub struct Page {
@@ -17,6 +18,7 @@ impl Database {
     pub fn new() -> Database {
         Database {
             pages: HashMap::new(),
+            by_language: HashMap::new(),
         }
     }
 
@@ -43,6 +45,10 @@ impl Database {
     }
 
     pub fn insert(&mut self, url: String, page: Page) {
-        self.pages.insert(url, page);
+        self.by_language
+            .entry(page.lang)
+            .or_insert(vec![])
+            .push(url.clone());
+        self.pages.insert(url, page.content);
     }
 }
