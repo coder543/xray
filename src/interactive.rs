@@ -12,9 +12,11 @@ impl Database {
                 Ok(ref exit) if exit == "exit" => break,
                 Err(ReadlineError::Interrupted) | Err(ReadlineError::Eof) => break,
                 Err(err) => return Err(format!("{:?}", err))?,
-                Ok(line) => self.search(vec![line])?,
+                Ok(line) => self.search(line.split_whitespace().map(|x| x.into()).collect())?,
             }
         }
-        Ok(())
+
+        //exit the process for now to avoid the slow Drop process for hundreds of thousands of objects
+        ::std::process::exit(0);
     }
 }

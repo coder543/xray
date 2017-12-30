@@ -61,4 +61,6 @@ fn main() {
         }
         _ => {}
     }
+
+    database.interactive().unwrap();
 }
