@@ -86,8 +86,6 @@ impl Database {
             .map(load_source)
             .collect::<Vec<_>>();
 
-        let elapsed = now.elapsed().readable();
-
         for result in results {
             let pages = result?;
             self.reserve(pages.len());
@@ -95,6 +93,8 @@ impl Database {
                 self.insert(url, page)
             }
         }
+
+        let elapsed = now.elapsed().readable();
 
         println!(
             "{} pages imported in {}",

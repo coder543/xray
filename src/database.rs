@@ -1,12 +1,18 @@
 #![allow(unused)]
 
+use std::collections::HashSet;
 use std::collections::HashMap;
-use whatlang::Lang;
 use std::path::Path;
+use std::default::Default;
 
+use whatlang::Lang;
+
+#[derive(Clone, Default)]
 pub struct Database {
-    pages: HashMap<String, String>,
-    by_language: HashMap<Lang, Vec<String>>,
+    next_uid: u64,
+    urls: HashMap<String, u64>,
+    by_language: HashMap<Lang, HashSet<u64>>,
+    by_word: HashMap<String, HashSet<u64>>,
 }
 
 pub struct Page {
@@ -17,8 +23,7 @@ pub struct Page {
 impl Database {
     pub fn new() -> Database {
         Database {
-            pages: HashMap::new(),
-            by_language: HashMap::new(),
+            ..Default::default()
         }
     }
 
@@ -30,25 +35,37 @@ impl Database {
         unimplemented!()
     }
 
-    pub fn merge(&mut self, database: Database) {
-        for (url, page) in database.pages {
-            self.pages.insert(url, page);
-        }
-    }
-
     pub fn len(&self) -> usize {
-        self.pages.len()
+        self.urls.len()
     }
 
     pub fn reserve(&mut self, len: usize) {
-        self.pages.reserve(len);
+        self.urls.reserve(len);
+    }
+
+    fn index_words(&mut self, url: u64, page: &Page) {
+        let mut words = page.content.split_whitespace().collect::<Vec<_>>();
+        words.sort();
+        words.dedup();
+
+        for word in words {
+            if word.len() > 2 {
+                self.by_word
+                    .entry(word.to_string())
+                    .or_insert(HashSet::new())
+                    .insert(url);
+            }
+        }
     }
 
     pub fn insert(&mut self, url: String, page: Page) {
+        let uid = self.next_uid;
+        self.next_uid += 1;
+        self.urls.insert(url, uid);
+        self.index_words(uid, &page);
         self.by_language
             .entry(page.lang)
-            .or_insert(vec![])
-            .push(url.clone());
-        self.pages.insert(url, page.content);
+            .or_insert(HashSet::new())
+            .insert(uid);
     }
 }
