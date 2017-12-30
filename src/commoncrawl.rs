@@ -1,7 +1,6 @@
 use std::str::{self, FromStr};
 
 use nom::{line_ending, IResult};
-use whatlang::*;
 
 /// A struct representing a single WET blob
 #[derive(Copy, Clone, Debug)]
@@ -20,7 +19,6 @@ pub enum WetRef<'a> {
         refers_to: &'a str,
         block_digest: &'a str,
         content_type: &'a str,
-        content_lang: Option<Info>,
         content: &'a str,
     },
 }
@@ -125,7 +123,6 @@ named!(parse_conversion<WetRef>, do_parse!(
             refers_to,
             block_digest,
             content_type,
-            content_lang: detect(content),
             content,
         }
     )
