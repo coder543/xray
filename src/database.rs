@@ -24,7 +24,9 @@ impl Database {
         unimplemented!()
     }
 
-    pub fn save(&self, location: &Path) {}
+    pub fn save(&self, location: &Path) {
+        unimplemented!()
+    }
 
     pub fn merge(&mut self, database: Database) {
         for (url, page) in database.pages {
