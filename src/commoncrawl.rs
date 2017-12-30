@@ -4,7 +4,7 @@ use nom::{line_ending, IResult};
 use whatlang::*;
 
 /// A struct representing a single WET blob
-#[derive(Clone, Debug)]
+#[derive(Copy, Clone, Debug)]
 pub enum WetRef<'a> {
     WarcInfo {
         date: &'a str,

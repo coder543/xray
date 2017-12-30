@@ -18,6 +18,7 @@ mod interactive;
 mod search;
 mod import;
 mod stats;
+mod helpers;
 
 use database::Database;
 
@@ -45,7 +46,7 @@ enum Xray {
 fn main() {
     let args = Xray::from_args();
 
-    let mut database = Database::load();
+    let mut database = Database::new();
     let result = match args {
         Xray::Interactive => database.interactive(),
         Xray::Search { query } => database.search(query),
