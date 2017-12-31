@@ -68,5 +68,5 @@ fn main() {
         exit(1)
     }
 
-    // database.interactive().unwrap();
+    database.interactive().unwrap();
 }

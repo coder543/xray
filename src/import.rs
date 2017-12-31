@@ -19,10 +19,12 @@ fn load_source(source: PathBuf) -> Result<Vec<(String, Page)>, StrError> {
 
     // shorten peak memory usage time by deallocating `content` after this block
     {
-        let gzip = source.to_str().unwrap().ends_with(".gz");
+        let is_gzip = source.to_str().unwrap().ends_with(".gz");
+
         let mut file = File::open(source)?;
         let content = &mut Vec::new();
-        if gzip {
+
+        if is_gzip {
             MultiGzDecoder::new(BufReader::new(file)).read_to_end(content)?;
         } else {
             file.read_to_end(content)?;
