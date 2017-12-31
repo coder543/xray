@@ -4,7 +4,7 @@ use std::io::{BufReader, Read};
 use std::path::PathBuf;
 use std::time::Instant;
 
-use libflate::gzip::Decoder;
+use flate2::read::MultiGzDecoder;
 use rayon::prelude::*;
 use whatlang::detect;
 
@@ -23,7 +23,7 @@ fn load_source(source: PathBuf) -> Result<Vec<(String, Page)>, StrError> {
         let mut file = File::open(source)?;
         let content = &mut Vec::new();
         if gzip {
-            Decoder::new(BufReader::new(file))?.read_to_end(content)?;
+            MultiGzDecoder::new(BufReader::new(file)).read_to_end(content)?;
         } else {
             file.read_to_end(content)?;
         }
