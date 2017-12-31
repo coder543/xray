@@ -1,6 +1,6 @@
 use std::fs::File;
 use std::fs::read_dir;
-use std::io::Read;
+use std::io::{BufReader, Read};
 use std::path::PathBuf;
 use std::time::Instant;
 
@@ -21,19 +21,11 @@ fn load_source(source: PathBuf) -> Result<Vec<(String, Page)>, StrError> {
     {
         let gzip = source.to_str().unwrap().ends_with(".gz");
         let mut file = File::open(source)?;
-        let raw_content = &mut Vec::new();
-        file.read_to_end(raw_content)?;
-        let mut content = &mut Vec::new();
+        let content = &mut Vec::new();
         if gzip {
-            println!("decoding");
-            Decoder::new(raw_content.as_slice())?.read_to_end(content)?;
-            println!(
-                "length: {}\n{}",
-                content.len(),
-                String::from_utf8_lossy(content)
-            );
+            Decoder::new(BufReader::new(file))?.read_to_end(content)?;
         } else {
-            content = raw_content;
+            file.read_to_end(content)?;
         }
 
         content.shrink_to_fit();
