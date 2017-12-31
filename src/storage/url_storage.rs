@@ -9,7 +9,7 @@ use rayon_hash::HashMap;
 
 const JUMP_STRIDE: u32 = 1000;
 
-fn load_url_jump_tables(data_dir: &Path) -> Vec<u64> {
+pub fn load_url_jump_tables(data_dir: &Path) -> Vec<u64> {
     let url_idx_store_path = data_dir.join("urls.xraystore");
     let url_idx_store = OpenOptions::new()
         .read(true)

@@ -1,4 +1,3 @@
-use std::fs::{File, OpenOptions};
 use std::path::PathBuf;
 
 use rayon_hash::HashMap;
@@ -16,12 +15,12 @@ impl Storage {
     pub fn new<IntoPathBuf: Into<PathBuf>>(data_dir: IntoPathBuf) -> Storage {
         let data_dir = data_dir.into();
 
-        let url_jump_table = url_storage::load_jump_tables(&data_dir);
+        let url_jump_table = url_storage::load_url_jump_tables(&data_dir);
 
         Storage {
             data_dir,
             num_pages: 0,
-            url_jump_table: Vec::new(),
+            url_jump_table,
         }
     }
 
