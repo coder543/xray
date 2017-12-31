@@ -4,6 +4,9 @@ name = "xray"
 version = "0.1.0"
 
 [dependencies]
+brotli = "1.1.0"
+byteorder = "1.2.1"
+libflate = "0.1.13"
 rayon = "0.9.0"
 rayon-hash = "0.2.0"
 rustyline = "1.0.0"

@@ -4,6 +4,7 @@ use std::io::Read;
 use std::path::PathBuf;
 use std::time::Instant;
 
+use libflate::gzip::Decoder;
 use rayon::prelude::*;
 use whatlang::detect;
 
@@ -18,9 +19,23 @@ fn load_source(source: PathBuf) -> Result<Vec<(String, Page)>, StrError> {
 
     // shorten peak memory usage time by deallocating `content` after this block
     {
+        let gzip = source.to_str().unwrap().ends_with(".gz");
         let mut file = File::open(source)?;
-        let content = &mut Vec::new();
-        file.read_to_end(content)?;
+        let raw_content = &mut Vec::new();
+        file.read_to_end(raw_content)?;
+        let mut content = &mut Vec::new();
+        if gzip {
+            println!("decoding");
+            Decoder::new(raw_content.as_slice())?.read_to_end(content)?;
+            println!(
+                "length: {}\n{}",
+                content.len(),
+                String::from_utf8_lossy(content)
+            );
+        } else {
+            content = raw_content;
+        }
+
         content.shrink_to_fit();
 
         let mut remaining: &[u8] = content;
@@ -58,15 +73,18 @@ fn path_to_files(path: String) -> Vec<PathBuf> {
     }
 
     let mut files = Vec::new();
-    if let Ok(dir) = read_dir(path) {
+    if let Ok(dir) = read_dir(&path) {
         for entry in dir {
             if let Ok(entry) = entry {
                 let entry = entry.path();
-                if entry.is_file() && entry.extension().map_or(false, |ext| ext == "wet") {
+                let file_name = entry.to_str().unwrap();
+                if entry.is_file() && (file_name.ends_with(".wet") || entry.ends_with(".wet.gz")) {
                     files.push(entry.to_owned());
                 }
             }
         }
+    } else {
+        panic!("ERROR: invalid path provided! Path was {}", path.display());
     }
 
     files
@@ -90,7 +108,6 @@ impl Database {
 
         for result in results {
             let pages = result?;
-            self.reserve(pages.len());
             for (url, page) in pages {
                 self.insert(url, page)
             }

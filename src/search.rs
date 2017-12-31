@@ -7,7 +7,7 @@ use errors::StrError;
 use helpers::ReadableDuration;
 
 impl Database {
-    pub fn search(&self, words: Vec<String>) -> Result<(), StrError> {
+    pub fn search(&mut self, words: Vec<String>) -> Result<(), StrError> {
         // for detecting query language, only a limited set are supported to reduce
         // false positives on short strings
 

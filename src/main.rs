@@ -1,3 +1,6 @@
+extern crate brotli;
+extern crate byteorder;
+extern crate libflate;
 #[macro_use]
 extern crate nom;
 extern crate rayon;
@@ -13,15 +16,19 @@ use structopt::StructOpt;
 use std::process::exit;
 
 mod errors;
+mod helpers;
+
 mod commoncrawl;
 mod database;
+mod storage;
+
 mod interactive;
 mod search;
 mod import;
 mod stats;
-mod helpers;
 
 use database::Database;
+use storage::Storage;
 
 #[derive(StructOpt, Debug, Clone)]
 #[structopt(name = "xray")]
@@ -47,7 +54,8 @@ enum Xray {
 fn main() {
     let args = Xray::from_args();
 
-    let mut database = Database::new();
+    let storage = Storage::new("/mnt/d/tmp/");
+    let mut database = Database::new(storage);
     let result = match args {
         Xray::Interactive => database.interactive(),
         Xray::Search { query } => database.search(query),
@@ -60,5 +68,5 @@ fn main() {
         exit(1)
     }
 
-    database.interactive().unwrap();
+    // database.interactive().unwrap();
 }

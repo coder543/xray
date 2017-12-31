@@ -1,21 +1,23 @@
 #![allow(unused)]
 
-use helpers::canonicalize;
-use rayon_hash::HashMap;
-use rayon_hash::HashSet;
-use std::default::Default;
 use std::path::Path;
+use std::usize;
 
 use rayon::prelude::*;
+use rayon_hash::HashMap;
+use rayon_hash::HashSet;
 use whatlang::Lang;
 
 use helpers::canonical_eq;
+use helpers::canonicalize;
+use storage::Storage;
 
-#[derive(Clone, Default)]
+#[derive(Debug)]
 pub struct Database {
-    urls: Vec<String>,
-    by_language: HashMap<Lang, HashSet<usize>>,
-    by_word: HashMap<String, HashSet<usize>>,
+    storage: Storage,
+    urls: HashMap<u64, String>,
+    by_language: HashMap<Lang, HashSet<u64>>,
+    by_word: HashMap<String, HashSet<u64>>,
 }
 
 pub struct Page {
@@ -24,9 +26,12 @@ pub struct Page {
 }
 
 impl Database {
-    pub fn new() -> Database {
+    pub fn new(storage: Storage) -> Database {
         Database {
-            ..Default::default()
+            storage,
+            urls: Default::default(),
+            by_language: Default::default(),
+            by_word: Default::default(),
         }
     }
 
@@ -38,15 +43,11 @@ impl Database {
         unimplemented!()
     }
 
-    pub fn len(&self) -> usize {
-        self.urls.len()
+    pub fn len(&self) -> u64 {
+        self.storage.get_num_pages()
     }
 
-    pub fn reserve(&mut self, len: usize) {
-        self.urls.reserve(len);
-    }
-
-    fn index_words(&mut self, url: usize, content: &str) -> bool {
+    fn index_words(&mut self, content: &str) -> Option<u64> {
         let mut words = content.split_whitespace().collect::<Vec<_>>();
         words.par_sort_unstable();
         words.dedup_by(|&mut a, &mut b| canonical_eq(a, b));
@@ -57,8 +58,10 @@ impl Database {
             .collect::<Vec<_>>();
 
         if words.len() < 10 {
-            return false;
+            return None;
         }
+
+        let url = self.storage.next_id();
 
         for word in words {
             self.by_word
@@ -67,25 +70,21 @@ impl Database {
                 .insert(url);
         }
 
-        true
+        Some(url)
     }
 
     pub fn insert(&mut self, url: String, page: Page) {
-        let uid = self.urls.len();
-        self.urls.push(url);
-
         let Page { content, lang } = page;
+
         // if the page doesn't contain at least 10 words,
         // then we don't care about it.
-        if !self.index_words(uid, &content) {
-            self.urls.pop();
-            return;
+        if let Some(uid) = self.index_words(&content) {
+            self.urls.insert(uid, url);
+            self.by_language
+                .entry(lang)
+                .or_insert_with(HashSet::new)
+                .insert(uid);
         }
-
-        self.by_language
-            .entry(lang)
-            .or_insert_with(HashSet::new)
-            .insert(uid);
     }
 
     pub fn shrink(&mut self) {
@@ -102,7 +101,12 @@ impl Database {
             .for_each(|(_lang, hashset)| hashset.shrink_to_fit());
     }
 
-    pub fn query(&self, words: Vec<String>, lang: Option<Lang>) {
+    pub fn query(&mut self, words: Vec<String>, lang: Option<Lang>) {
+        if words.get(0) == Some(&"store".to_string()) {
+            self.storage.store_urls(&self.urls);
+            return;
+        }
+
         let mut sets = words
             .into_iter()
             .filter_map(|word| canonicalize(&word))
@@ -125,7 +129,7 @@ impl Database {
         let set = iter.next().unwrap();
         let results = iter.fold(set, |set1, set2| &set1 & &set2)
             .iter()
-            .map(|&uid| &self.urls[uid])
+            .map(|&uid| &self.urls[&uid])
             .collect::<Vec<_>>();
 
         println!("{} results", results.len());
