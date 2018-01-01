@@ -9,24 +9,24 @@ use storage::url_storage::UrlIndex;
 pub struct Storage {
     data_dir: PathBuf,
     num_pages: u64,
-    url_jump_table: Vec<UrlIndex>,
+    url_index: UrlIndex,
 }
 
 impl Storage {
     pub fn new<IntoPathBuf: Into<PathBuf>>(data_dir: IntoPathBuf) -> Storage {
         let data_dir = data_dir.into();
 
-        let url_jump_table = url_storage::load_url_indices(&data_dir).unwrap();
+        let url_index = UrlIndex::load(&data_dir).unwrap();
 
         let mut num_pages = 0;
-        for entry in &url_jump_table {
+        for entry in &url_index.0 {
             num_pages += entry.num_entries;
         }
 
         Storage {
             data_dir,
             num_pages,
-            url_jump_table,
+            url_index,
         }
     }
 
@@ -43,5 +43,10 @@ impl Storage {
 
     pub fn store_urls(&mut self, urls: &HashMap<u64, String>) {
         url_storage::store_urls(&self.data_dir, urls).unwrap();
+        *self = Storage::new(self.data_dir.clone());
+    }
+
+    pub fn get_urls(&self, urls: Vec<u64>) -> Vec<String> {
+        self.url_index.get_urls(urls)
     }
 }

@@ -8,7 +8,6 @@ use rayon_hash::HashMap;
 use rayon_hash::HashSet;
 use whatlang::Lang;
 
-use helpers::canonical_eq;
 use helpers::canonicalize;
 use storage::Storage;
 
@@ -18,6 +17,7 @@ pub struct Database {
     urls: HashMap<u64, String>,
     by_language: HashMap<Lang, HashSet<u64>>,
     by_word: HashMap<String, HashSet<u64>>,
+    by_title_word: HashMap<String, HashSet<u64>>,
 }
 
 pub struct Page {
@@ -32,15 +32,8 @@ impl Database {
             urls: Default::default(),
             by_language: Default::default(),
             by_word: Default::default(),
+            by_title_word: Default::default(),
         }
-    }
-
-    pub fn load(location: &Path) -> Database {
-        unimplemented!()
-    }
-
-    pub fn save(&self, location: &Path) {
-        unimplemented!()
     }
 
     pub fn len(&self) -> u64 {
@@ -48,20 +41,42 @@ impl Database {
     }
 
     fn index_words(&mut self, content: &str) -> Option<u64> {
-        let mut words = content.split_whitespace().collect::<Vec<_>>();
-        words.par_sort_unstable();
-        words.dedup_by(|&mut a, &mut b| canonical_eq(a, b));
+        let mut debug = false;
+        let title_end = content.find('\n').unwrap_or(0);
+        let (mut title, content) = content.split_at(title_end);
 
-        let words = words
-            .into_iter()
+        if title.len() > 250 {
+            title = ""; // title is invalid
+        }
+
+        let mut title_words = title
+            .split_whitespace()
             .filter_map(canonicalize)
             .collect::<Vec<_>>();
+
+        title_words.sort_unstable();
+        title_words.dedup();
+
+        let mut words = content
+            .split_whitespace()
+            .filter_map(canonicalize)
+            .collect::<Vec<_>>();
+
+        words.sort_unstable();
+        words.dedup();
 
         if words.len() < 10 {
             return None;
         }
 
         let url = self.storage.next_id();
+
+        for title_word in title_words {
+            self.by_title_word
+                .entry(title_word)
+                .or_insert_with(HashSet::new)
+                .insert(url);
+        }
 
         for word in words {
             self.by_word
@@ -128,8 +143,10 @@ impl Database {
         let set = iter.next().unwrap();
         let results = iter.fold(set, |set1, set2| &set1 & &set2)
             .iter()
-            .map(|&uid| &self.urls[&uid])
+            .cloned()
             .collect::<Vec<_>>();
+
+        let results = self.storage.get_urls(results);
 
         println!("{} results", results.len());
 
