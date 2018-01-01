@@ -6,7 +6,7 @@ use std::time::Instant;
 
 use flate2::read::MultiGzDecoder;
 use rayon::prelude::*;
-use whatlang::detect;
+use whatlang::{detect, Lang};
 
 use commoncrawl::{GetWetRef, WetRef};
 use database::Database;
@@ -47,13 +47,12 @@ fn load_source(source: PathBuf) -> Result<Vec<(String, Page)>, StrError> {
     let pages = raw_pages
         .into_par_iter()
         .filter_map(|(url, content)| {
-            Some((
-                url,
-                Page {
-                    lang: detect(&content)?.lang(),
-                    content,
-                },
-            ))
+            let lang = detect(&content)?.lang();
+            if lang == Lang::Eng || lang == Lang::Spa || lang == Lang::Fra {
+                Some((url, Page { lang, content }))
+            } else {
+                None
+            }
         })
         .collect::<Vec<_>>();
 
