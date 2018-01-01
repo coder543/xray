@@ -17,6 +17,7 @@ pub struct Database {
     urls: HashMap<u64, String>,
     by_language: HashMap<Lang, HashSet<u64>>,
     by_word: HashMap<String, HashSet<u64>>,
+    by_word_pair: HashMap<(String, String), HashSet<u64>>,
     by_title_word: HashMap<String, HashSet<u64>>,
 }
 
@@ -32,6 +33,7 @@ impl Database {
             urls: Default::default(),
             by_language: Default::default(),
             by_word: Default::default(),
+            by_word_pair: Default::default(),
             by_title_word: Default::default(),
         }
     }
@@ -78,7 +80,15 @@ impl Database {
                 .insert(url);
         }
 
+        let mut last_word = None;
         for word in words {
+            if let Some(last_word) = last_word {
+                self.by_word_pair
+                    .entry((last_word, word.clone()))
+                    .or_insert_with(HashSet::new)
+                    .insert(url);
+            }
+            last_word = Some(word.clone());
             self.by_word
                 .entry(word)
                 .or_insert_with(HashSet::new)
@@ -108,6 +118,8 @@ impl Database {
 
         self.by_language.shrink_to_fit();
         self.by_word.shrink_to_fit();
+
+        println!("num words: {}", self.by_word.len());
 
         self.by_language
             .iter_mut()

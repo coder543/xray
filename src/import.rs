@@ -5,6 +5,7 @@ use std::path::PathBuf;
 use std::time::Instant;
 
 use flate2::read::MultiGzDecoder;
+use indicatif::{ProgressBar, ProgressStyle};
 use rayon::prelude::*;
 use whatlang::{detect, Lang};
 
@@ -99,12 +100,25 @@ impl Database {
 
         println!("sources loaded, now importing into database");
 
+        let total_pages = results
+            .iter()
+            .map(|res| res.as_ref().ok().map_or(0, |res| res.len() as u64))
+            .sum();
+
+        let progressbar = ProgressBar::new(total_pages);
+        progressbar.set_style(
+            ProgressStyle::default_bar().template("[importing] {wide_bar:.cyan/white} {eta}"),
+        );
+
         for result in results {
             let pages = result?;
             for (url, page) in pages {
+                progressbar.inc(1);
                 self.insert(url, page)
             }
         }
+
+        progressbar.finish_and_clear();
 
         println!("persisting database");
         self.persist();

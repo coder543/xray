@@ -1,6 +1,7 @@
 extern crate brotli;
 extern crate byteorder;
 extern crate flate2;
+extern crate indicatif;
 #[macro_use]
 extern crate nom;
 extern crate rayon;

@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use rayon_hash::HashMap;
 
 mod url_storage;
+mod index_storage;
 use storage::url_storage::UrlIndex;
 
 #[derive(Debug)]
