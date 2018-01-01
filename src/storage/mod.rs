@@ -11,6 +11,7 @@ pub struct Storage {
     data_dir: PathBuf,
     num_pages: u64,
     url_index: UrlIndex,
+    urls: HashMap<u64, String>,
 }
 
 impl Storage {
@@ -28,6 +29,7 @@ impl Storage {
             data_dir,
             num_pages,
             url_index,
+            urls: HashMap::new(),
         }
     }
 
@@ -35,15 +37,17 @@ impl Storage {
         self.num_pages
     }
 
-    pub fn next_id(&mut self) -> u64 {
+    pub fn next_url_id(&mut self, url: String) -> u64 {
         let id = self.num_pages;
+        self.urls.insert(id, url);
+
         self.num_pages += 1;
 
         id
     }
 
-    pub fn store_urls(&mut self, urls: &HashMap<u64, String>) {
-        url_storage::store_urls(&self.data_dir, urls).unwrap();
+    pub fn persist(&mut self) {
+        url_storage::store_urls(&self.data_dir, &self.urls).unwrap();
         *self = Storage::new(self.data_dir.clone());
     }
 

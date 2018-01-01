@@ -14,7 +14,6 @@ use storage::Storage;
 #[derive(Debug)]
 pub struct Database {
     storage: Storage,
-    urls: HashMap<u64, String>,
     by_language: HashMap<Lang, HashSet<u64>>,
     by_word: HashMap<String, HashSet<u64>>,
     by_word_pair: HashMap<(String, String), HashSet<u64>>,
@@ -30,7 +29,6 @@ impl Database {
     pub fn new(storage: Storage) -> Database {
         Database {
             storage,
-            urls: Default::default(),
             by_language: Default::default(),
             by_word: Default::default(),
             by_word_pair: Default::default(),
@@ -42,7 +40,7 @@ impl Database {
         self.storage.get_num_pages()
     }
 
-    fn index_words(&mut self, content: &str) -> Option<u64> {
+    fn index_words(&mut self, url: String, content: &str) -> Option<u64> {
         let mut debug = false;
         let title_end = content.find('\n').unwrap_or(0);
         let (mut title, content) = content.split_at(title_end);
@@ -71,7 +69,7 @@ impl Database {
             return None;
         }
 
-        let url = self.storage.next_id();
+        let url = self.storage.next_url_id(url);
 
         for title_word in title_words {
             self.by_title_word
@@ -103,8 +101,7 @@ impl Database {
 
         // if the page doesn't contain at least 10 words,
         // then we don't care about it.
-        if let Some(uid) = self.index_words(&content) {
-            self.urls.insert(uid, url);
+        if let Some(uid) = self.index_words(url, &content) {
             self.by_language
                 .entry(lang)
                 .or_insert_with(HashSet::new)
@@ -113,9 +110,6 @@ impl Database {
     }
 
     pub fn shrink(&mut self) {
-        // now, URLs are being retrieved from on-disk indexes
-        self.urls = HashMap::new();
-
         self.by_language.shrink_to_fit();
         self.by_word.shrink_to_fit();
 
@@ -131,7 +125,7 @@ impl Database {
     }
 
     pub fn persist(&mut self) {
-        self.storage.store_urls(&self.urls);
+        self.storage.persist();
     }
 
     pub fn query(&mut self, words: Vec<String>, lang: Option<Lang>) {
