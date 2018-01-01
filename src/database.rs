@@ -103,7 +103,9 @@ impl Database {
     }
 
     pub fn shrink(&mut self) {
-        self.urls.shrink_to_fit();
+        // now, URLs are being retrieved from on-disk indexes
+        self.urls = HashMap::new();
+
         self.by_language.shrink_to_fit();
         self.by_word.shrink_to_fit();
 
@@ -146,10 +148,13 @@ impl Database {
             .cloned()
             .collect::<Vec<_>>();
 
-        let results = self.storage.get_urls(results);
+        let len = results.len();
 
-        println!("{} results", results.len());
+        let results = self.storage
+            .get_urls(results.into_iter().take(10).collect());
 
-        results.iter().take(10).for_each(|url| println!("{}", url));
+        println!("{} results", len);
+
+        results.iter().for_each(|url| println!("{}", url));
     }
 }

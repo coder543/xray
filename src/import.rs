@@ -107,10 +107,10 @@ impl Database {
             }
         }
 
-        self.shrink();
-
         println!("persisting database");
         self.persist();
+
+        self.shrink();
 
         let elapsed = now.elapsed().readable();
 
