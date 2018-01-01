@@ -1,26 +1,84 @@
 use errors::StrError;
 use std::fs::{File, OpenOptions};
-use std::io::{BufWriter, Write};
-use std::path::Path;
+use std::io::{BufReader, BufWriter, Error, ErrorKind, Read, Write};
+use std::path::{Path, PathBuf};
+use std::str;
 
-use byteorder::{LittleEndian, WriteBytesExt};
+use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use rayon::prelude::*;
 use rayon_hash::HashMap;
 
 const JUMP_STRIDE: u32 = 1000;
 
-pub fn load_url_jump_tables(data_dir: &Path) -> Vec<u64> {
-    let url_idx_store_path = data_dir.join("urls.xraystore");
-    let url_idx_store = OpenOptions::new()
-        .read(true)
-        .create(true)
-        .open(&url_idx_store_path)
-        .expect(&format!(
-            "Could not open or create URL storage file {}",
-            url_idx_store_path.display(),
-        ));
+#[derive(Clone, Debug)]
+pub struct UrlIndex {
+    pub file_path: PathBuf,
+    pub first_index: u64,
+    pub num_entries: u64,
+    pub jump_stride: u32,
+    pub jump_table: Vec<u64>,
+}
 
-    unimplemented!();
+pub fn load_url_jump_table(path: &Path) -> Result<(u32, Vec<u64>), Error> {
+    let mut file = BufReader::new(File::open(path)?);
+
+    let num_entries = file.read_u64::<LittleEndian>()?;
+    let jump_stride = file.read_u32::<LittleEndian>()?;
+    let mut jump_table = Vec::with_capacity(num_entries as usize);
+    for _ in 0..num_entries {
+        jump_table.push(file.read_u64::<LittleEndian>()?);
+    }
+
+    Ok((jump_stride, jump_table))
+}
+
+pub fn load_url_index(reader: &mut Read, data_dir: &Path) -> Result<UrlIndex, Error> {
+    let first_index = reader.read_u64::<LittleEndian>()?;
+    let num_entries = reader.read_u64::<LittleEndian>()?;
+
+    let url_len = reader.read_u16::<LittleEndian>()? as usize;
+    let mut url_bytes = vec![0; url_len];
+    reader.read_exact(&mut url_bytes)?;
+    let file_path = data_dir.join(str::from_utf8(&url_bytes).unwrap());
+
+    let (jump_stride, jump_table) = load_url_jump_table(&file_path)
+        .expect("failed to load URL jump table. Index must be corrupt.");
+
+    println!("jump_table: {:?}", jump_table);
+
+    Ok(UrlIndex {
+        file_path,
+        first_index,
+        num_entries,
+        jump_stride,
+        jump_table,
+    })
+}
+
+pub fn load_url_indices(data_dir: &Path) -> Result<Vec<UrlIndex>, StrError> {
+    let url_idx_store_path = data_dir.join("urls.xraystore");
+    let mut url_idx_store = BufReader::new(
+        OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .open(&url_idx_store_path)
+            .expect(&format!(
+                "Could not open or create URL storage file {}",
+                url_idx_store_path.display(),
+            )),
+    );
+
+    let mut table_entries = Vec::new();
+    loop {
+        match load_url_index(&mut url_idx_store, data_dir) {
+            Ok(index) => table_entries.push(index),
+            Err(ref err) if err.kind() == ErrorKind::UnexpectedEof => break,
+            Err(err) => Err(err)?,
+        }
+    }
+
+    Ok(table_entries)
 }
 
 fn build_url_jump_table(sorted_urls: &Vec<(&u64, &String)>) -> Vec<u64> {
@@ -30,7 +88,7 @@ fn build_url_jump_table(sorted_urls: &Vec<(&u64, &String)>) -> Vec<u64> {
 
     for &(_, url) in sorted_urls {
         // emit a jump table entry for every JUMP_STRIDE urls
-        if jump_idx % JUMP_STRIDE == 0 {
+        if jump_idx % JUMP_STRIDE == 0 && jump_idx != 0 {
             jump_table.push(jump_loc);
         }
 

@@ -101,12 +101,11 @@ impl Database {
             .for_each(|(_lang, hashset)| hashset.shrink_to_fit());
     }
 
-    pub fn query(&mut self, words: Vec<String>, lang: Option<Lang>) {
-        if words.get(0) == Some(&"store".to_string()) {
-            self.storage.store_urls(&self.urls);
-            return;
-        }
+    pub fn persist(&mut self) {
+        self.storage.store_urls(&self.urls);
+    }
 
+    pub fn query(&mut self, words: Vec<String>, lang: Option<Lang>) {
         let mut sets = words
             .into_iter()
             .filter_map(|word| canonicalize(&word))

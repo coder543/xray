@@ -3,23 +3,29 @@ use std::path::PathBuf;
 use rayon_hash::HashMap;
 
 mod url_storage;
+use storage::url_storage::UrlIndex;
 
 #[derive(Debug)]
 pub struct Storage {
     data_dir: PathBuf,
     num_pages: u64,
-    url_jump_table: Vec<u64>,
+    url_jump_table: Vec<UrlIndex>,
 }
 
 impl Storage {
     pub fn new<IntoPathBuf: Into<PathBuf>>(data_dir: IntoPathBuf) -> Storage {
         let data_dir = data_dir.into();
 
-        let url_jump_table = url_storage::load_url_jump_tables(&data_dir);
+        let url_jump_table = url_storage::load_url_indices(&data_dir).unwrap();
+
+        let mut num_pages = 0;
+        for entry in &url_jump_table {
+            num_pages += entry.num_entries;
+        }
 
         Storage {
             data_dir,
-            num_pages: 0,
+            num_pages,
             url_jump_table,
         }
     }
