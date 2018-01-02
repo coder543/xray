@@ -121,10 +121,21 @@ impl Storage {
         lang: Lang,
         words: Vec<String>,
     ) -> (HashMap<String, HashSet<u64>>, HashMap<String, HashSet<u64>>) {
-        let _lang = self.indexed_data.langs.get(lang.code()).unwrap();
+        let lang = self.indexed_data.langs.get(lang.code()).unwrap();
 
-        let content_words = self.indexed_data.get_words("by_word", words.clone());
-        let title_words = self.indexed_data.get_words("by_title_word", words);
+        // get the sets and then filter by the current language
+
+        let content_words = self.indexed_data
+            .get_words("by_word", words.clone())
+            .into_iter()
+            .map(|(word, set)| (word, &set & lang))
+            .collect();
+
+        let title_words = self.indexed_data
+            .get_words("by_title_word", words)
+            .into_iter()
+            .map(|(word, set)| (word, &set & lang))
+            .collect();
 
         (title_words, content_words)
     }

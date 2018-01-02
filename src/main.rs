@@ -67,6 +67,4 @@ fn main() {
         eprintln!("{}", error.0);
         exit(1)
     }
-
-    database.interactive().unwrap();
 }
