@@ -1,3 +1,4 @@
+use rayon_hash::HashMap;
 use whatlang::Lang;
 
 use helpers::canonicalize;
@@ -100,25 +101,39 @@ impl Database {
         let (title_sets, content_sets) = self.storage
             .get_word_sets(lang.unwrap_or(Lang::Eng), words_with_pairs);
 
-        // if sets.is_empty() {
-        //     println!("no matches found");
-        //     return;
-        // }
+        if title_sets.is_empty() && content_sets.is_empty() {
+            println!("no matches found");
+            return;
+        }
 
-        let mut iter = content_sets.into_iter();
-        let set = iter.next().unwrap();
-        let results = iter.fold(set.1, |set1, set2| &set1 & &set2.1)
-            .iter()
-            .cloned()
-            .collect::<Vec<_>>();
+        let mut results = HashMap::new();
+
+        for word in title_sets {
+            for url in word.1 {
+                *results.entry(url).or_insert(0) += word.0.len() * 2;
+            }
+        }
+
+        for word in content_sets {
+            for url in word.1 {
+                *results.entry(url).or_insert(0) += word.0.len();
+            }
+        }
+
+        let mut results = results.into_iter().collect::<Vec<_>>();
+        results.sort_by_key(|r| r.1);
+        results.reverse();
 
         let len = results.len();
 
-        let results = self.storage
-            .get_urls(results.into_iter().take(10).collect());
+        let results: Vec<u64> = results.into_iter().take(10).map(|r| r.0).collect();
+
+        let result_map = self.storage.get_urls(results.clone());
 
         println!("{} results", len);
 
-        results.iter().for_each(|url| println!("{}", url.1));
+        results
+            .iter()
+            .for_each(|url_id| println!("{}", result_map[url_id]));
     }
 }
