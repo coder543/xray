@@ -1,10 +1,14 @@
 use std::path::PathBuf;
 
-use rayon_hash::HashMap;
+use rayon_hash::{HashMap, HashSet};
 
 mod url_storage;
-mod index_storage;
 use storage::url_storage::UrlIndex;
+
+mod index_storage;
+use storage::index_storage::IndexedStore;
+
+const JUMP_STRIDE: u32 = 1000;
 
 #[derive(Debug)]
 pub struct Storage {
@@ -19,6 +23,7 @@ impl Storage {
         let data_dir = data_dir.into();
 
         let url_index = UrlIndex::load(&data_dir).unwrap();
+        let _indexed_index = IndexedStore::load(&data_dir).unwrap();
 
         let mut num_pages = 0;
         for entry in &url_index.0 {
@@ -46,8 +51,15 @@ impl Storage {
         id
     }
 
-    pub fn persist(&mut self) {
+    pub fn persist_urls(&mut self) {
         url_storage::store_urls(&self.data_dir, &self.urls).unwrap();
+    }
+
+    pub fn persist_indexed(&mut self, tag: u64, indexed_data: Vec<(String, HashSet<u64>)>) {
+        index_storage::store_indexed(tag, &self.data_dir, indexed_data).unwrap();
+    }
+
+    pub fn reload(&mut self) {
         *self = Storage::new(self.data_dir.clone());
     }
 

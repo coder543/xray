@@ -9,7 +9,7 @@ use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use rayon::prelude::*;
 use rayon_hash::HashMap;
 
-const JUMP_STRIDE: u32 = 1000;
+use super::JUMP_STRIDE;
 
 #[derive(Clone, Debug)]
 pub struct UrlStore {

@@ -1,9 +1,3 @@
-#![allow(unused)]
-
-use std::path::Path;
-use std::usize;
-
-use rayon::prelude::*;
 use rayon_hash::HashMap;
 use rayon_hash::HashSet;
 use whatlang::Lang;
@@ -41,7 +35,6 @@ impl Database {
     }
 
     fn index_words(&mut self, url: String, content: &str) -> Option<u64> {
-        let mut debug = false;
         let title_end = content.find('\n').unwrap_or(0);
         let (mut title, content) = content.split_at(title_end);
 
@@ -113,8 +106,6 @@ impl Database {
         self.by_language.shrink_to_fit();
         self.by_word.shrink_to_fit();
 
-        println!("num words: {}", self.by_word.len());
-
         self.by_language
             .iter_mut()
             .for_each(|(_lang, hashset)| hashset.shrink_to_fit());
@@ -125,7 +116,33 @@ impl Database {
     }
 
     pub fn persist(&mut self) {
-        self.storage.persist();
+        use std::mem::replace;
+
+        self.storage.persist_urls();
+
+        let by_language = replace(&mut self.by_language, HashMap::new())
+            .into_iter()
+            .map(|(lang, set)| (lang.code().to_string(), set))
+            .collect();
+        self.storage.persist_indexed(0, by_language);
+
+        let by_title_word = replace(&mut self.by_title_word, HashMap::new())
+            .into_iter()
+            .collect();
+        self.storage.persist_indexed(1, by_title_word);
+
+        let by_word = replace(&mut self.by_word, HashMap::new())
+            .into_iter()
+            .collect();
+        self.storage.persist_indexed(2, by_word);
+
+        let by_word_pair = replace(&mut self.by_word_pair, HashMap::new())
+            .into_iter()
+            .map(|((a, b), set)| (a + "|" + &b, set))
+            .collect();
+        self.storage.persist_indexed(3, by_word_pair);
+
+        self.storage.reload();
     }
 
     pub fn query(&mut self, words: Vec<String>, lang: Option<Lang>) {
