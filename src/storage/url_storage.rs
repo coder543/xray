@@ -21,10 +21,30 @@ pub struct UrlStore {
 }
 
 impl UrlStore {
+    fn load(file_path: PathBuf, first_index: u64, num_entries: u64) -> Result<UrlStore, Error> {
+        let mut file = BufReader::new(File::open(&file_path)?);
+
+        let jump_table_len = file.read_u64::<LittleEndian>()?;
+
+        let jump_stride = file.read_u32::<LittleEndian>()? as u64;
+        let mut jump_table = Vec::with_capacity(jump_table_len as usize);
+        for _ in 0..jump_table_len {
+            jump_table.push(file.read_u64::<LittleEndian>()?);
+        }
+
+        Ok(UrlStore {
+            file_path,
+            first_index,
+            num_entries,
+            jump_stride,
+            jump_table,
+        })
+    }
+
     fn get_url<ReadSeek: Read + Seek>(
         reader: &mut ReadSeek,
         url_idx: u64,
-    ) -> Result<String, Error> {
+    ) -> Result<(u64, String), Error> {
         let url_len = reader.read_u16::<LittleEndian>()? as i64;
         let cur_idx = reader.read_u64::<LittleEndian>()?;
         assert!(url_idx >= cur_idx);
@@ -35,7 +55,7 @@ impl UrlStore {
             let mut url_bytes = vec![0; url_len as usize];
             reader.read_exact(&mut url_bytes)?;
 
-            return Ok(String::from_utf8(url_bytes).unwrap());
+            return Ok((url_idx, String::from_utf8(url_bytes).unwrap()));
         }
 
         reader.seek(SeekFrom::Current(url_len))?;
@@ -51,17 +71,17 @@ impl UrlStore {
         let mut url_bytes = vec![0; url_len];
         reader.read_exact(&mut url_bytes)?;
 
-        Ok(String::from_utf8(url_bytes).unwrap())
+        Ok((url_idx, String::from_utf8(url_bytes).unwrap()))
     }
 
-    pub fn get_urls(&self, url_idxs: &[u64]) -> Result<Vec<String>, Error> {
+    pub fn get_urls(&self, url_idxs: &[u64]) -> Result<HashMap<u64, String>, Error> {
         let mut file = BufReader::new(File::open(&self.file_path).unwrap());
 
         // length of the jump table + len(jump_stride) + len(num_entries)
         let start_offset = self.jump_table.len() as u64 * 8 + 12;
         file.seek(SeekFrom::Start(start_offset))?;
 
-        let mut urls = Vec::new();
+        let mut urls = HashMap::new();
 
         let mut offsets = self.jump_table.iter().cloned().peekable();
         let mut jump_idx = 0;
@@ -77,7 +97,8 @@ impl UrlStore {
                     file.seek(SeekFrom::Start(start_offset + cur_offset))?;
                 }
             }
-            urls.push(UrlStore::get_url(&mut file, idx)?);
+            let (id, url) = UrlStore::get_url(&mut file, idx)?;
+            urls.insert(id, url);
         }
 
         Ok(urls)
@@ -88,19 +109,6 @@ impl UrlStore {
 pub struct UrlIndex(pub Vec<UrlStore>);
 
 impl UrlIndex {
-    fn load_jump_table(path: &Path) -> Result<(u64, Vec<u64>), Error> {
-        let mut file = BufReader::new(File::open(path)?);
-
-        let num_entries = file.read_u64::<LittleEndian>()?;
-        let jump_stride = file.read_u32::<LittleEndian>()?;
-        let mut jump_table = Vec::with_capacity(num_entries as usize);
-        for _ in 0..num_entries {
-            jump_table.push(file.read_u64::<LittleEndian>()?);
-        }
-
-        Ok((jump_stride as u64, jump_table))
-    }
-
     fn load_index(reader: &mut Read, data_dir: &Path) -> Result<UrlStore, Error> {
         let first_index = reader.read_u64::<LittleEndian>()?;
         let num_entries = reader.read_u64::<LittleEndian>()?;
@@ -110,17 +118,7 @@ impl UrlIndex {
         reader.read_exact(&mut store_path_bytes)?;
         let file_path = data_dir.join(str::from_utf8(&store_path_bytes).unwrap());
 
-        let (jump_stride, jump_table) = UrlIndex::load_jump_table(&file_path)
-            .expect("failed to load URL jump table. Index must be corrupt.");
-
-
-        Ok(UrlStore {
-            file_path,
-            first_index,
-            num_entries,
-            jump_stride,
-            jump_table,
-        })
+        UrlStore::load(file_path, first_index, num_entries)
     }
 
     pub fn load(data_dir: &Path) -> Result<UrlIndex, StrError> {
@@ -149,10 +147,10 @@ impl UrlIndex {
         Ok(UrlIndex(table_entries))
     }
 
-    pub fn get_urls(&self, mut ids: Vec<u64>) -> Vec<String> {
+    pub fn get_urls(&self, mut ids: Vec<u64>) -> HashMap<u64, String> {
         ids.sort_unstable();
 
-        let mut urls = Vec::new();
+        let mut urls = HashMap::new();
         for store in &self.0 {
             let elements = ids.iter()
                 .cloned()
@@ -161,7 +159,7 @@ impl UrlIndex {
             urls.extend(store.get_urls(&elements).unwrap());
         }
 
-        assert!(urls.len() == ids.len());
+        assert_eq!(urls.len(), ids.len());
         urls
     }
 }

@@ -10,18 +10,146 @@ use std::u64;
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use rayon::prelude::*;
 use rayon_hash::{HashMap, HashSet};
+use whatlang::Lang;
 
 use super::JUMP_STRIDE;
 
 #[derive(Clone, Debug)]
 pub struct IndexedStore {
     pub file_path: PathBuf,
+    pub tag: String,
+    pub content_offset: u64,
     pub words: HashSet<String>,
-    pub jump_table: Vec<u64>,
+    pub jump_table: Vec<(String, u64)>,
 }
 
 impl IndexedStore {
-    pub fn load(data_dir: &Path) -> Result<(), StrError> {
+    fn load(file_path: PathBuf, tag: String, num_entries: u64) -> Result<IndexedStore, Error> {
+        let mut file = BufReader::new(File::open(&file_path)?);
+
+        let jump_table_len = file.read_u64::<LittleEndian>()?;
+
+        let mut jump_table = Vec::with_capacity(jump_table_len as usize);
+        for _ in 0..jump_table_len {
+            let word_len = file.read_u8()? as usize;
+            let mut word = vec![0; word_len];
+            file.read_exact(&mut word)?;
+            jump_table.push((
+                String::from_utf8(word).unwrap(),
+                file.read_u64::<LittleEndian>()?,
+            ));
+        }
+
+        let mut words = HashSet::new();
+
+        for _ in 0..num_entries {
+            let word_len = file.read_u8()? as usize;
+            let mut word = vec![0; word_len];
+            file.read_exact(&mut word)?;
+            words.insert(String::from_utf8(word).unwrap());
+        }
+
+        let content_offset = file.seek(SeekFrom::Current(0))?;
+
+        Ok(IndexedStore {
+            file_path,
+            tag,
+            content_offset,
+            words,
+            jump_table,
+        })
+    }
+
+    fn get_word<ReadSeek: Read + Seek>(
+        reader: &mut ReadSeek,
+        word: String,
+    ) -> Result<(String, HashSet<u64>), Error> {
+        let cur_word_len = reader.read_u8()? as usize;
+        let mut cur_word_bytes = vec![0; cur_word_len];
+        reader.read_exact(&mut cur_word_bytes)?;
+        let mut cur_word = String::from_utf8(cur_word_bytes).unwrap();
+        let mut cur_set_length = reader.read_u64::<LittleEndian>()?;
+
+        assert!(word >= cur_word);
+
+        while word > cur_word {
+            reader.seek(SeekFrom::Current(cur_set_length as i64 * 8))?;
+            let cur_word_len = reader.read_u8()? as usize;
+            let mut cur_word_bytes = vec![0; cur_word_len];
+            reader.read_exact(&mut cur_word_bytes)?;
+            cur_word = String::from_utf8(cur_word_bytes).unwrap();
+            cur_set_length = reader.read_u64::<LittleEndian>()?;
+        }
+
+        assert_eq!(word, cur_word);
+
+        let mut word_set = HashSet::new();
+
+        for _ in 0..cur_set_length {
+            word_set.insert(reader.read_u64::<LittleEndian>()?);
+        }
+
+        Ok((cur_word, word_set))
+    }
+
+    pub fn get_words(
+        &self,
+        mut words: Vec<String>,
+    ) -> Result<HashMap<String, HashSet<u64>>, Error> {
+        words.sort_unstable();
+        let mut file = BufReader::new(File::open(&self.file_path).unwrap());
+
+        file.seek(SeekFrom::Start(self.content_offset))?;
+
+        let mut word_sets = HashMap::new();
+
+        let mut offsets = self.jump_table.iter().cloned().peekable();
+        let mut next_jump_word = offsets.next().unwrap();
+        for word in words {
+            while word >= next_jump_word.0 {
+                let offset = next_jump_word.1;
+
+                next_jump_word = match offsets.next() {
+                    Some(jump_word) => jump_word,
+                    None => break,
+                };
+
+                // only seek once we are in the right range
+                if word < next_jump_word.0 {
+                    file.seek(SeekFrom::Start(self.content_offset + offset))?;
+                }
+            }
+            let (word, set) = IndexedStore::get_word(&mut file, word)?;
+            word_sets.insert(word, set);
+        }
+
+        Ok(word_sets)
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct IndexedData {
+    pub langs: HashMap<String, HashSet<u64>>,
+    stores: Vec<IndexedStore>,
+}
+
+impl IndexedData {
+    fn load_index(reader: &mut Read, data_dir: &Path) -> Result<IndexedStore, Error> {
+        let tag_len = reader.read_u8()? as usize;
+        let mut tag = vec![0; tag_len];
+        reader.read_exact(&mut tag)?;
+
+        let num_entries = reader.read_u64::<LittleEndian>()?;
+
+        let store_path_len = reader.read_u16::<LittleEndian>()? as usize;
+        let mut store_path_bytes = vec![0; store_path_len];
+        reader.read_exact(&mut store_path_bytes)?;
+        let file_path = data_dir.join(str::from_utf8(&store_path_bytes).unwrap());
+
+        IndexedStore::load(file_path, String::from_utf8(tag).unwrap(), num_entries)
+    }
+
+    pub fn load(data_dir: &Path) -> Result<IndexedData, StrError> {
         let indexed_idx_store_path = data_dir.join("indexed.xraystore");
         let mut indexed_idx_store = BufReader::new(
             OpenOptions::new()
@@ -35,18 +163,65 @@ impl IndexedStore {
                 )),
         );
 
-        Ok(())
+        let mut table_entries = Vec::new();
+        loop {
+            match IndexedData::load_index(&mut indexed_idx_store, data_dir) {
+                Ok(index) => table_entries.push(index),
+                Err(ref err) if err.kind() == ErrorKind::UnexpectedEof => break,
+                Err(err) => Err(err)?,
+            }
+        }
+
+        let lang_map = {
+            let lang_store = table_entries.iter().find(|x| x.tag == "by_language");
+
+            match lang_store {
+                Some(lang_store) => lang_store
+                    .get_words(vec![
+                        "eng".to_string(),
+                        "spa".to_string(),
+                        "fra".to_string(),
+                    ])
+                    .unwrap(),
+                None => HashMap::new(),
+            }
+        };
+
+        Ok(IndexedData {
+            langs: lang_map,
+            stores: table_entries,
+        })
+    }
+
+    pub fn get_words(&self, tag: &str, mut words: Vec<String>) -> HashMap<String, HashSet<u64>> {
+        words.sort_unstable();
+
+        let mut word_map = HashMap::new();
+        for store in self.stores.iter().filter(|store| store.tag == tag) {
+            let elements = words
+                .iter()
+                .cloned()
+                .filter(|x| store.words.contains(x))
+                .collect::<Vec<_>>();
+            let elements_len = elements.len();
+            let elements_map = store.get_words(elements).unwrap();
+            assert_eq!(elements_map.len(), elements_len);
+            word_map.extend(elements_map);
+        }
+
+        word_map
     }
 }
 
-fn build_indexed_jump_table(sorted_urls: &Vec<(String, HashSet<u64>)>) -> Vec<(String, u64)> {
+fn build_indexed_jump_table(sorted_words: &Vec<(String, HashSet<u64>)>) -> Vec<(String, u64)> {
+    // ensure that the jump table will always have at least one entry
     let mut jump_table = Vec::new();
     let mut jump_loc = 0u64;
     let mut jump_idx = 0;
 
-    for &(ref word, ref ids) in sorted_urls {
+    for &(ref word, ref ids) in sorted_words {
         // emit a jump table entry for every JUMP_STRIDE words
-        if jump_idx % JUMP_STRIDE == 0 && jump_idx != 0 {
+        if jump_idx % JUMP_STRIDE == 0 {
             jump_table.push((word.to_string(), jump_loc));
         }
 
@@ -59,7 +234,7 @@ fn build_indexed_jump_table(sorted_urls: &Vec<(String, HashSet<u64>)>) -> Vec<(S
 }
 
 pub fn store_indexed(
-    tag: u64,
+    tag: &str,
     data_dir: &Path,
     mut indexed_data: Vec<(String, HashSet<u64>)>,
 ) -> Result<(), StrError> {
@@ -79,7 +254,8 @@ pub fn store_indexed(
         .open(data_dir.join("indexed.xraystore"))?);
 
     // write out the tag for the indexed store in overall index first
-    indexed_idx_store.write_u64::<LittleEndian>(tag)?;
+    indexed_idx_store.write_u8(tag.len() as u8)?;
+    indexed_idx_store.write(tag.as_bytes())?;
 
     // write out how many words are in this file
     indexed_idx_store.write_u64::<LittleEndian>(indexed_data.len() as u64)?;
@@ -91,9 +267,6 @@ pub fn store_indexed(
     // write out the number of entries in the jump table
     indexed_store.write_u64::<LittleEndian>(jump_table.len() as u64)?;
 
-    // write out the stride length of the jump table
-    indexed_store.write_u32::<LittleEndian>(JUMP_STRIDE)?;
-
     // write out the jump table
     for (word, loc) in jump_table {
         let word = word.as_bytes();
@@ -102,7 +275,19 @@ pub fn store_indexed(
         indexed_store.write_u64::<LittleEndian>(loc)?;
     }
 
-    // now we need to write out each URL
+    // now we need to write out all the words for the HashSet to load initially
+    for &(ref word, _) in &indexed_data {
+        let word = word.as_bytes();
+        assert!(word.len() <= 255);
+
+        // we write out the word length first
+        indexed_store.write_u8(word.len() as u8)?;
+
+        // then write out the word
+        indexed_store.write(word)?;
+    }
+
+    // now we need to write out each word
     for (word, url_ids) in indexed_data {
         let word = word.as_bytes();
         assert!(word.len() <= 255);

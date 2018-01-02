@@ -36,7 +36,7 @@ pub fn canonicalize(word: &str) -> Option<String> {
             .flat_map(|c| c.to_lowercase())
             .for_each(|c| output.push(c));
 
-        if !output.is_empty() {
+        if output.len() > 2 {
             return Some(output);
         }
     }
