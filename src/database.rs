@@ -43,8 +43,12 @@ impl Database {
         self.storage.persist();
     }
 
-    pub fn optimize(&mut self) -> Result<(), StrError> {
-        self.storage.optimize()
+    pub fn optimize(&mut self, chunk_size: usize) -> Result<(), StrError> {
+        self.storage.optimize(chunk_size)
+    }
+
+    pub fn rebuild_index(&mut self) -> Result<(), StrError> {
+        self.storage.rebuild_index()
     }
 
     pub fn query(&mut self, words: Vec<String>, lang: Option<Lang>) {

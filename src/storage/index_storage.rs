@@ -143,7 +143,7 @@ impl IndexedStore {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct IndexedData {
     pub langs: HashMap<String, HashSet<u64>>,
     pub stores: Vec<IndexedStore>,

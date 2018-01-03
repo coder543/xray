@@ -105,7 +105,7 @@ impl UrlStore {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct UrlIndex(pub Vec<UrlStore>);
 
 impl UrlIndex {

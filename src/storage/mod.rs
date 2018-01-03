@@ -25,7 +25,7 @@ struct ImportProcessing {
     urls: HashMap<u64, String>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Storage {
     data_dir: PathBuf,
     num_pages: u64,
@@ -35,10 +35,17 @@ pub struct Storage {
 }
 
 impl Storage {
-    pub fn new<IntoPathBuf: Into<PathBuf>>(data_dir: IntoPathBuf) -> Storage {
+    pub fn new<IntoPathBuf: Into<PathBuf>>(data_dir: IntoPathBuf, load_indices: bool) -> Storage {
         use std::env::set_current_dir;
         let data_dir = data_dir.into();
         set_current_dir(&data_dir).unwrap();
+
+        if !load_indices {
+            return Storage {
+                data_dir,
+                ..Default::default()
+            };
+        }
 
         let now = Instant::now();
 
@@ -138,10 +145,10 @@ impl Storage {
 
     #[allow(unused)]
     pub fn reload(&mut self) {
-        *self = Storage::new(self.data_dir.clone());
+        *self = Storage::new(self.data_dir.clone(), true);
     }
 
-    pub fn optimize_tag(&mut self, tag: &str) -> Result<(), StrError> {
+    pub fn optimize_tag(&mut self, tag: &str, chunk_size: usize) -> Result<(), StrError> {
         println!("optimizing {}", tag);
         let stores = self.indexed_data
             .stores
@@ -160,7 +167,7 @@ impl Storage {
         words.dedup();
 
         words
-            .par_chunks(2_500_000)
+            .par_chunks(chunk_size)
             .enumerate()
             .for_each(|(chunk_num, chunk)| {
                 let mut new_data: Vec<(String, Vec<u64>)> = Vec::new();
@@ -205,7 +212,7 @@ impl Storage {
 
     pub fn rebuild_index(&mut self) -> Result<(), StrError> {
         use byteorder::{LittleEndian, ReadBytesExt};
-        use std::fs::{canonicalize, read_dir, remove_file, rename, File};
+        use std::fs::{canonicalize, read_dir, rename, File};
 
         fn traverse(path: &Path) -> Result<Vec<(PathBuf, u64, String)>, StrError> {
             let mut results = Vec::new();
@@ -243,11 +250,6 @@ impl Storage {
             Ok(results)
         }
 
-        for store in self.indexed_data.stores.drain(..) {
-            remove_file(store.file_path)?;
-        }
-        remove_file(self.data_dir.join("indexed.xraystore"))?;
-
         let index = traverse(&self.data_dir)?;
 
         File::create(self.data_dir.join("indexed.xraystore"))?;
@@ -263,10 +265,17 @@ impl Storage {
         Ok(())
     }
 
-    pub fn optimize(&mut self) -> Result<(), StrError> {
+    pub fn optimize(&mut self, chunk_size: usize) -> Result<(), StrError> {
+        use std::fs::remove_file;
+
         for tag in &["by_word", "by_title_word", "by_language"] {
-            self.optimize_tag(tag)?;
+            self.optimize_tag(tag, chunk_size)?;
         }
+
+        for store in self.indexed_data.stores.drain(..) {
+            remove_file(store.file_path)?;
+        }
+        remove_file(self.data_dir.join("indexed.xraystore"))?;
 
         self.rebuild_index()?;
 

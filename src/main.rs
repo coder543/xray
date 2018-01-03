@@ -48,7 +48,13 @@ enum Xray {
 
     #[structopt(name = "optimize")]
     /// Optimizes the database files
-    Optimize,
+    Optimize {
+        #[structopt(long = "chunk-size", default_value = "2_500_000")] chunk_size: usize,
+    },
+
+    #[structopt(name = "rebuild-index")]
+    /// Only performs the final index-rebuilding step of Optimize
+    RebuildIndex,
 
     #[structopt(name = "stats")]
     /// Prints out stats about the database
@@ -58,13 +64,21 @@ enum Xray {
 fn main() {
     let args = Xray::from_args();
 
-    let storage = Storage::new("/mnt/d/tmp/");
+    // rebuild index doesn't actually need to wait around to read the index
+    let load_index = if let &Xray::RebuildIndex = &args {
+        false
+    } else {
+        true
+    };
+
+    let storage = Storage::new("/mnt/d/tmp/", load_index);
     let mut database = Database::new(storage);
     let result = match args {
         Xray::Interactive => database.interactive(),
         Xray::Search { query } => database.search(query),
         Xray::Import { sources } => database.import(sources),
-        Xray::Optimize => database.optimize(),
+        Xray::Optimize { chunk_size } => database.optimize(chunk_size),
+        Xray::RebuildIndex => database.rebuild_index(),
         Xray::Stats => database.stats(),
     };
 
