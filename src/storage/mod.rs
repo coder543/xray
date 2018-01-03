@@ -1,4 +1,5 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use storage::index_storage::append_index;
 
 use rayon::prelude::*;
 use rayon_hash::{HashMap, HashSet};
@@ -182,10 +183,72 @@ impl Storage {
         Ok(())
     }
 
+    pub fn rebuild_index(&mut self) -> Result<(), StrError> {
+        use byteorder::{LittleEndian, ReadBytesExt};
+        use std::fs::{canonicalize, read_dir, remove_file, rename, File};
+
+        fn traverse(path: &Path) -> Result<Vec<(PathBuf, u64, String)>, StrError> {
+            let mut results = Vec::new();
+            for entry in read_dir(path)? {
+                let entry = entry?;
+                let entry_path = entry.path();
+                if entry_path.is_dir() {
+                    results.extend(traverse(&entry_path)?);
+                } else if entry_path.is_file() {
+                    let file_name = entry_path
+                        .file_name()
+                        .unwrap()
+                        .to_str()
+                        .unwrap()
+                        .to_string();
+                    // did we find an indexed file?
+                    if file_name.starts_with("indexed_") && file_name.ends_with(".xraystore") {
+                        let new_name = file_name.replace("_tmp", "");
+                        let mut tag = file_name
+                            .replace("indexed_", "")
+                            .chars()
+                            .take_while(|&x| !x.is_numeric())
+                            .collect::<String>();
+                        tag.pop(); // remove trailing underscore
+                        let new_path = path.join(new_name);
+                        rename(entry_path, &new_path)?;
+                        let mut file = File::open(&new_path)?;
+                        let num_entries = file.read_u64::<LittleEndian>()?;
+
+                        results.push((canonicalize(new_path)?, num_entries, tag));
+                    }
+                }
+            }
+
+            Ok(results)
+        }
+
+        for store in self.indexed_data.stores.drain(..) {
+            remove_file(store.file_path)?;
+        }
+        remove_file(self.data_dir.join("indexed.xraystore"))?;
+
+        let index = traverse(&self.data_dir)?;
+
+        File::create(self.data_dir.join("indexed.xraystore"))?;
+        for (index_path, num_entries, tag) in index {
+            append_index(
+                &self.data_dir,
+                &index_path.into_os_string().into_string().unwrap(),
+                &tag,
+                num_entries,
+            )?;
+        }
+
+        Ok(())
+    }
+
     pub fn optimize(&mut self) -> Result<(), StrError> {
         for tag in &["by_word", "by_title_word", "by_language"] {
             self.optimize_tag(tag)?;
         }
+
+        self.rebuild_index()?;
 
         Ok(())
     }

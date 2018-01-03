@@ -263,6 +263,30 @@ fn build_indexed_jump_table(sorted_words: &Vec<(String, HashSet<u64>)>) -> Vec<(
     jump_table
 }
 
+pub fn append_index(
+    data_dir: &Path,
+    indexed_store_loc: &str,
+    tag: &str,
+    num_entries: u64,
+) -> Result<(), Error> {
+    let mut indexed_idx_store = BufWriter::new(OpenOptions::new()
+        .append(true)
+        .open(data_dir.join("indexed.xraystore"))?);
+
+    // write out the tag for the indexed store in overall index first
+    indexed_idx_store.write_u8(tag.len() as u8)?;
+    indexed_idx_store.write(tag.as_bytes())?;
+
+    // write out how many words are in this file
+    indexed_idx_store.write_u64::<LittleEndian>(num_entries)?;
+
+    // save the file name of this URL store
+    indexed_idx_store.write_u16::<LittleEndian>(indexed_store_loc.len() as u16)?;
+    indexed_idx_store.write(indexed_store_loc.as_bytes())?;
+
+    Ok(())
+}
+
 pub fn store_indexed(
     tag: &str,
     unique: u64,
@@ -281,20 +305,7 @@ pub fn store_indexed(
     let mut indexed_store = BufWriter::new(File::create(data_dir.join(indexed_store_loc))?);
 
     if !tag.contains("_tmp") {
-        let mut indexed_idx_store = BufWriter::new(OpenOptions::new()
-            .append(true)
-            .open(data_dir.join("indexed.xraystore"))?);
-
-        // write out the tag for the indexed store in overall index first
-        indexed_idx_store.write_u8(tag.len() as u8)?;
-        indexed_idx_store.write(tag.as_bytes())?;
-
-        // write out how many words are in this file
-        indexed_idx_store.write_u64::<LittleEndian>(indexed_data.len() as u64)?;
-
-        // save the file name of this URL store
-        indexed_idx_store.write_u16::<LittleEndian>(indexed_store_loc.len() as u16)?;
-        indexed_idx_store.write(indexed_store_loc.as_bytes())?;
+        append_index(data_dir, indexed_store_loc, tag, indexed_data.len() as u64)?;
     }
 
     // write out how many words are in this file
