@@ -25,7 +25,7 @@ struct ImportProcessing {
     urls: HashMap<u64, String>,
 }
 
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct Storage {
     data_dir: PathBuf,
     num_pages: u64,
@@ -72,19 +72,21 @@ impl Storage {
         self.num_pages
     }
 
-    pub fn insert_url(&mut self, url: String, lang: Lang) -> u64 {
+    pub fn insert_url(&mut self, url: String) -> u64 {
         let id = self.num_pages;
         self.import_processing.urls.insert(id, url);
-
-        self.import_processing
-            .by_language
-            .entry(lang)
-            .or_insert_with(Vec::new)
-            .push(id);
 
         self.num_pages += 1;
 
         id
+    }
+
+    pub fn insert_lang(&mut self, url_id: u64, lang: Lang) {
+        self.import_processing
+            .by_language
+            .entry(lang)
+            .or_insert_with(Vec::new)
+            .push(url_id);
     }
 
     pub fn insert_word(&mut self, url_id: u64, in_title: bool, word: String) {
@@ -105,7 +107,7 @@ impl Storage {
             .count() as u64
     }
 
-    pub fn persist(&mut self) {
+    pub fn persist(&mut self, unique: Option<u64>) {
         use std::mem::replace;
 
         self.persist_urls();
@@ -114,27 +116,34 @@ impl Storage {
             .into_iter()
             .map(|(lang, set)| (lang.code().to_string(), set))
             .collect();
-        self.persist_indexed("by_language", by_language);
+        self.persist_indexed("by_language", unique, by_language);
 
         let by_title_word = replace(&mut self.import_processing.by_title_word, HashMap::new())
             .into_iter()
             .collect();
-        self.persist_indexed("by_title_word", by_title_word);
+        self.persist_indexed("by_title_word", unique, by_title_word);
 
         let by_word = replace(&mut self.import_processing.by_word, HashMap::new())
             .into_iter()
             .collect();
-        self.persist_indexed("by_word", by_word);
+        self.persist_indexed("by_word", unique, by_word);
     }
 
     pub fn persist_urls(&mut self) {
         url_storage::store_urls(&self.data_dir, &self.import_processing.urls).unwrap();
+        self.import_processing.urls = HashMap::new();
     }
 
-    pub fn persist_indexed(&self, tag: &str, indexed_data: Vec<(String, Vec<u64>)>) {
+    pub fn persist_indexed(
+        &self,
+        tag: &str,
+        unique: Option<u64>,
+        indexed_data: Vec<(String, Vec<u64>)>,
+    ) {
+        let unique = unique.unwrap_or_else(|| self.next_unique(tag));
         index_storage::store_indexed(
             tag,
-            self.next_unique(tag),
+            unique,
             &self.data_dir,
             indexed_data
                 .into_iter()
@@ -170,7 +179,9 @@ impl Storage {
             .par_chunks(chunk_size)
             .enumerate()
             .for_each(|(chunk_num, chunk)| {
-                let mut new_data: Vec<(String, Vec<u64>)> = Vec::new();
+                let mut new_data: Vec<(String, Vec<u64>)> =
+                    chunk.iter().map(|x| (x.clone(), Vec::new())).collect();
+
                 println!("stores.get_words - {}", chunk_num);
                 let store_data = stores
                     .par_iter()
@@ -194,7 +205,7 @@ impl Storage {
                     for (word, mut set) in data {
                         match new_data.binary_search_by(|&(ref probe, _)| probe.cmp(&word)) {
                             Ok(idx) => new_data[idx].1.append(&mut set),
-                            Err(idx) => new_data.insert(idx, (word, set)),
+                            Err(_) => panic!("invalid word!"),
                         };
                     }
                 }

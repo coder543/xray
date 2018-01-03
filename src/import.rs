@@ -108,7 +108,9 @@ fn path_to_files(path: String) -> Vec<PathBuf> {
             if let Ok(entry) = entry {
                 let entry = entry.path();
                 let file_name = entry.to_str().unwrap();
-                if entry.is_file() && (file_name.ends_with(".wet") || entry.ends_with(".wet.gz")) {
+                if entry.is_file()
+                    && (file_name.ends_with(".wet") || file_name.ends_with(".wet.gz"))
+                {
                     files.push(entry.to_owned());
                 }
             }
@@ -121,30 +123,59 @@ fn path_to_files(path: String) -> Vec<PathBuf> {
 }
 
 impl Database {
-    pub fn import(&mut self, sources: Vec<String>) -> Result<(), StrError> {
+    pub fn import(&mut self, sources: Vec<String>, chunk_size: usize) -> Result<(), StrError> {
         let starting_page_count = self.len();
 
         let now = Instant::now();
 
         println!("loading sources");
-        let results = sources
+        let sources = sources
             .into_par_iter()
             .flat_map(path_to_files)
-            .into_par_iter()
-            .map(load_source)
             .collect::<Vec<_>>();
 
-        println!("sources loaded, now importing into database");
+        sources
+            .chunks(chunk_size)
+            .enumerate()
+            .for_each(|(chunk_num, chunk)| {
+                let chunk_len = chunk.len();
+                let results = chunk
+                    .into_par_iter()
+                    .cloned()
+                    .map(load_source)
+                    .map(Result::unwrap)
+                    .collect::<Vec<_>>();
 
-        for result in results {
-            let pages = result?;
-            for (url, page) in pages {
-                self.insert(url, page)
-            }
-        }
+                println!("{} sources loaded, now importing into database", chunk_len);
 
-        println!("persisting database");
-        self.persist();
+                // sequential segment, generate URL IDs then persist the URL database
+                let mut results = results
+                    .into_iter()
+                    .map(|pages| {
+                        let mut pages = pages
+                            .into_iter()
+                            .map(|(url, page)| (self.insert_url(url), page))
+                            .collect::<Vec<_>>();
+                        pages.shrink_to_fit();
+                        pages
+                    })
+                    .collect::<Vec<_>>();
+                results.shrink_to_fit();
+
+                self.persist_urls();
+
+                results.into_par_iter().enumerate().for_each(|(i, pages)| {
+                    let mut temp_db = self.clone();
+                    println!("processing segment {}/{}", i + 1, chunk_len);
+
+                    for (url, page) in pages {
+                        temp_db.insert(url, page)
+                    }
+
+                    println!("persisting segment {}/{}", i + 1, chunk_len);
+                    temp_db.persist(Some((chunk_num * chunk_size + i) as u64));
+                });
+            });
 
         let elapsed = now.elapsed().readable();
 

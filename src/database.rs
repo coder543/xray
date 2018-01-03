@@ -5,7 +5,7 @@ use errors::StrError;
 use helpers::{add_pairs, canonicalize};
 use storage::Storage;
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Database {
     storage: Storage,
 }
@@ -25,10 +25,14 @@ impl Database {
         self.storage.get_num_pages()
     }
 
-    pub fn insert(&mut self, url: String, page: Page) {
+    pub fn insert_url(&mut self, url: String) -> u64 {
+        self.storage.insert_url(url)
+    }
+
+    pub fn insert(&mut self, url: u64, page: Page) {
         let Page { title, words, lang } = page;
 
-        let url = self.storage.insert_url(url, lang);
+        self.storage.insert_lang(url, lang);
 
         for title_word in title {
             self.storage.insert_word(url, true, title_word);
@@ -39,8 +43,12 @@ impl Database {
         }
     }
 
-    pub fn persist(&mut self) {
-        self.storage.persist();
+    pub fn persist_urls(&mut self) {
+        self.storage.persist_urls();
+    }
+
+    pub fn persist(&mut self, unique: Option<u64>) {
+        self.storage.persist(unique);
     }
 
     pub fn optimize(&mut self, chunk_size: usize) -> Result<(), StrError> {

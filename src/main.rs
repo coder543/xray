@@ -44,12 +44,17 @@ enum XrayCmd {
 
     #[structopt(name = "import")]
     /// Imports raw CommonCrawl data into xray
-    Import { sources: Vec<String> },
+    Import {
+        #[structopt(long = "chunk-size", default_value = "24")]
+        /// The number of import files to be processed in parallel
+        chunk_size: usize,
+        sources: Vec<String>,
+    },
 
     #[structopt(name = "optimize")]
     /// Optimizes the database files
     Optimize {
-        #[structopt(long = "chunk-size", default_value = "2_500_000")] chunk_size: usize,
+        #[structopt(long = "chunk-size", default_value = "2500000")] chunk_size: usize,
     },
 
     #[structopt(name = "rebuild-index")]
@@ -88,7 +93,10 @@ fn main() {
     let result = match args.command {
         Interactive => database.interactive(),
         Search { query } => database.search(query),
-        Import { sources } => database.import(sources),
+        Import {
+            chunk_size,
+            sources,
+        } => database.import(sources, chunk_size),
         Optimize { chunk_size } => database.optimize(chunk_size),
         RebuildIndex => database.rebuild_index(),
         Stats => database.stats(),
