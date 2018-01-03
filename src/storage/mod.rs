@@ -178,7 +178,7 @@ impl Storage {
                         let store_words = chunk
                             .iter()
                             .cloned()
-                            .filter(|word| store.words.contains(word))
+                            .filter(|word| store.words.binary_search(word).is_ok())
                             .collect();
                         let map = match store.get_words(store_words) {
                             Ok(map) => map,

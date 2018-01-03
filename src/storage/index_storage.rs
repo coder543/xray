@@ -19,7 +19,7 @@ pub struct IndexedStore {
     pub file_path: PathBuf,
     pub tag: String,
     pub content_offset: u64,
-    pub words: HashSet<String>,
+    pub words: Vec<String>,
     pub jump_table: Vec<(String, u64)>,
 }
 
@@ -43,15 +43,17 @@ impl IndexedStore {
                 file.read_u64::<LittleEndian>()?,
             ));
         }
+        jump_table.shrink_to_fit();
 
-        let mut words = HashSet::new();
-
+        let mut words = Vec::new();
         for _ in 0..num_entries {
             let word_len = file.read_u8()? as usize;
             let mut word = vec![0; word_len];
             file.read_exact(&mut word)?;
-            words.insert(String::from_utf8(word).unwrap());
+            words.push(String::from_utf8(word).unwrap());
         }
+        words.par_sort_unstable();
+        words.shrink_to_fit();
 
         let content_offset = file.seek(SeekFrom::Current(0))?;
 
@@ -215,6 +217,8 @@ impl IndexedData {
                 }
             }
 
+            result.shrink_to_fit();
+
             result
         };
 
@@ -232,7 +236,7 @@ impl IndexedData {
             let elements = words
                 .iter()
                 .cloned()
-                .filter(|x| store.words.contains(x))
+                .filter(|x| store.words.binary_search(x).is_ok())
                 .collect::<Vec<_>>();
             let elements_len = elements.len();
             let elements_map = store.get_words(elements).unwrap();

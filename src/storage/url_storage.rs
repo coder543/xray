@@ -31,6 +31,7 @@ impl UrlStore {
         for _ in 0..jump_table_len {
             jump_table.push(file.read_u64::<LittleEndian>()?);
         }
+        jump_table.shrink_to_fit();
 
         Ok(UrlStore {
             file_path,
