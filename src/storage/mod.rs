@@ -1,9 +1,11 @@
 use std::path::PathBuf;
 
+use rayon::prelude::*;
 use rayon_hash::{HashMap, HashSet};
 use whatlang::Lang;
 
 mod url_storage;
+use errors::StrError;
 use storage::url_storage::UrlIndex;
 
 mod index_storage;
@@ -120,6 +122,72 @@ impl Storage {
     #[allow(unused)]
     pub fn reload(&mut self) {
         *self = Storage::new(self.data_dir.clone());
+    }
+
+    pub fn optimize_tag(&mut self, tag: &str) -> Result<(), StrError> {
+        let stores = self.indexed_data
+            .stores
+            .iter()
+            .filter(|store| store.tag == tag)
+            .collect::<Vec<_>>();
+
+        let mut words = stores
+            .iter()
+            .flat_map(|store| store.words.iter())
+            .map(|word| word.to_string())
+            .collect::<Vec<_>>();
+
+        words.sort_unstable();
+        words.dedup();
+
+        println!("total words: {}", words.len());
+
+        words
+            .par_chunks(5_000_000)
+            .enumerate()
+            .for_each(|(chunk_num, chunk)| {
+                let mut new_data = HashMap::new();
+                let store_data = stores
+                    .par_iter()
+                    .map(|store| {
+                        println!("  - {} store.get_words", chunk_num);
+                        let map = match store.get_words(chunk.to_vec()) {
+                            Ok(map) => map,
+                            Err(err) => {
+                                panic!("store: {}, err: {:?}", store.file_path.display(), err);
+                            }
+                        };
+                        map
+                    })
+                    .collect::<Vec<_>>();
+                println!("  - {} for loop", chunk_num);
+                for data in store_data {
+                    for (word, set) in data {
+                        new_data
+                            .entry(word)
+                            .or_insert_with(HashSet::new)
+                            .extend(set);
+                    }
+                }
+                println!("{} persist chunk", chunk_num);
+                let new_data = new_data.into_iter().collect();
+                index_storage::store_indexed(
+                    &(tag.to_string() + "_tmp"),
+                    chunk_num as u64,
+                    &self.data_dir,
+                    new_data,
+                ).unwrap();
+            });
+
+        Ok(())
+    }
+
+    pub fn optimize(&mut self) -> Result<(), StrError> {
+        for tag in &["by_word", "by_title_word", "by_language"] {
+            self.optimize_tag(tag)?;
+        }
+
+        Ok(())
     }
 
     /// gets the associated HashSets for each word, filtered by language

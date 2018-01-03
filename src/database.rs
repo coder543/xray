@@ -1,6 +1,7 @@
 use rayon_hash::HashMap;
 use whatlang::Lang;
 
+use errors::StrError;
 use helpers::{add_pairs, canonicalize};
 use storage::Storage;
 
@@ -40,6 +41,10 @@ impl Database {
 
     pub fn persist(&mut self) {
         self.storage.persist();
+    }
+
+    pub fn optimize(&mut self) -> Result<(), StrError> {
+        self.storage.optimize()
     }
 
     pub fn query(&mut self, words: Vec<String>, lang: Option<Lang>) {

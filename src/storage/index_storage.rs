@@ -27,6 +27,9 @@ impl IndexedStore {
     fn load(file_path: PathBuf, tag: String, num_entries: u64) -> Result<IndexedStore, Error> {
         let mut file = BufReader::new(File::open(&file_path)?);
 
+        // ensure that the index and file agree on how many entries exist
+        assert_eq!(num_entries, file.read_u64::<LittleEndian>()?);
+
         let jump_table_len = file.read_u64::<LittleEndian>()?;
 
         let mut jump_table = Vec::with_capacity(jump_table_len as usize);
@@ -63,14 +66,18 @@ impl IndexedStore {
     fn get_word<ReadSeek: Read + Seek>(
         reader: &mut ReadSeek,
         word: String,
-    ) -> Result<(String, HashSet<u64>), Error> {
+    ) -> Result<Option<(String, HashSet<u64>)>, Error> {
         let cur_word_len = reader.read_u8()? as usize;
         let mut cur_word_bytes = vec![0; cur_word_len];
         reader.read_exact(&mut cur_word_bytes)?;
         let mut cur_word = String::from_utf8(cur_word_bytes).unwrap();
         let mut cur_set_length = reader.read_u64::<LittleEndian>()?;
 
-        assert!(word >= cur_word);
+        if word < cur_word {
+            // move backwards a word, we overstepped and the word isn't here
+            reader.seek(SeekFrom::Current(-9 - cur_word.len() as i64))?;
+            return Ok(None);
+        }
 
         while word > cur_word {
             reader.seek(SeekFrom::Current(cur_set_length as i64 * 8))?;
@@ -81,7 +88,11 @@ impl IndexedStore {
             cur_set_length = reader.read_u64::<LittleEndian>()?;
         }
 
-        assert_eq!(word, cur_word);
+        if word != cur_word {
+            // move backwards a word, we overstepped and the word isn't here
+            reader.seek(SeekFrom::Current(-9 - cur_word.len() as i64))?;
+            return Ok(None);
+        }
 
         let mut word_set = HashSet::new();
 
@@ -89,7 +100,7 @@ impl IndexedStore {
             word_set.insert(reader.read_u64::<LittleEndian>()?);
         }
 
-        Ok((cur_word, word_set))
+        Ok(Some((cur_word, word_set)))
     }
 
     pub fn get_words(
@@ -119,8 +130,15 @@ impl IndexedStore {
                     file.seek(SeekFrom::Start(self.content_offset + offset))?;
                 }
             }
-            let (word, set) = IndexedStore::get_word(&mut file, word)?;
-            word_sets.insert(word, set);
+
+            match IndexedStore::get_word(&mut file, word.clone()) {
+                Ok(Some((word, set))) => {
+                    let _ = word_sets.insert(word, set);
+                }
+                Err(ref err) if err.kind() == ErrorKind::UnexpectedEof => return Ok(word_sets),
+                Err(err) => Err(err)?,
+                _ => {}
+            }
         }
 
         Ok(word_sets)
@@ -262,20 +280,25 @@ pub fn store_indexed(
     let indexed_store_loc = &format!("indexed_{}_{}.xraystore", tag, unique);
     let mut indexed_store = BufWriter::new(File::create(data_dir.join(indexed_store_loc))?);
 
-    let mut indexed_idx_store = BufWriter::new(OpenOptions::new()
-        .append(true)
-        .open(data_dir.join("indexed.xraystore"))?);
+    if !tag.contains("_tmp") {
+        let mut indexed_idx_store = BufWriter::new(OpenOptions::new()
+            .append(true)
+            .open(data_dir.join("indexed.xraystore"))?);
 
-    // write out the tag for the indexed store in overall index first
-    indexed_idx_store.write_u8(tag.len() as u8)?;
-    indexed_idx_store.write(tag.as_bytes())?;
+        // write out the tag for the indexed store in overall index first
+        indexed_idx_store.write_u8(tag.len() as u8)?;
+        indexed_idx_store.write(tag.as_bytes())?;
+
+        // write out how many words are in this file
+        indexed_idx_store.write_u64::<LittleEndian>(indexed_data.len() as u64)?;
+
+        // save the file name of this URL store
+        indexed_idx_store.write_u16::<LittleEndian>(indexed_store_loc.len() as u16)?;
+        indexed_idx_store.write(indexed_store_loc.as_bytes())?;
+    }
 
     // write out how many words are in this file
-    indexed_idx_store.write_u64::<LittleEndian>(indexed_data.len() as u64)?;
-
-    // save the file name of this URL store
-    indexed_idx_store.write_u16::<LittleEndian>(indexed_store_loc.len() as u16)?;
-    indexed_idx_store.write(indexed_store_loc.as_bytes())?;
+    indexed_store.write_u64::<LittleEndian>(indexed_data.len() as u64)?;
 
     // write out the number of entries in the jump table
     indexed_store.write_u64::<LittleEndian>(jump_table.len() as u64)?;

@@ -46,6 +46,10 @@ enum Xray {
     /// Imports raw CommonCrawl data into xray
     Import { sources: Vec<String> },
 
+    #[structopt(name = "optimize")]
+    /// Optimizes the database files
+    Optimize,
+
     #[structopt(name = "stats")]
     /// Prints out stats about the database
     Stats,
@@ -60,6 +64,7 @@ fn main() {
         Xray::Interactive => database.interactive(),
         Xray::Search { query } => database.search(query),
         Xray::Import { sources } => database.import(sources),
+        Xray::Optimize => database.optimize(),
         Xray::Stats => database.stats(),
     };
 
