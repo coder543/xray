@@ -19,8 +19,9 @@ pub struct IndexedStore {
     pub file_path: PathBuf,
     pub tag: String,
     pub content_offset: u64,
-    pub words: Vec<String>,
+    pub num_entries: u64,
     pub jump_table: Vec<(String, u64)>,
+    pub jump_stride: u32,
 }
 
 impl IndexedStore {
@@ -32,6 +33,7 @@ impl IndexedStore {
         assert_eq!(num_entries, file.read_u64::<LittleEndian>()?);
 
         let jump_table_len = file.read_u64::<LittleEndian>()?;
+        let jump_stride = file.read_u32::<LittleEndian>()?;
 
         let mut jump_table = Vec::with_capacity(jump_table_len as usize);
         for _ in 0..jump_table_len {
@@ -45,30 +47,21 @@ impl IndexedStore {
         }
         jump_table.shrink_to_fit();
 
-        let mut words = Vec::new();
-        for _ in 0..num_entries {
-            let word_len = file.read_u8()? as usize;
-            let mut word = vec![0; word_len];
-            file.read_exact(&mut word)?;
-            words.push(String::from_utf8(word).unwrap());
-        }
-        words.par_sort_unstable();
-        words.shrink_to_fit();
-
         let content_offset = file.seek(SeekFrom::Current(0))?;
 
         Ok(IndexedStore {
             file_path,
             tag,
             content_offset,
-            words,
+            num_entries,
             jump_table,
+            jump_stride,
         })
     }
 
     fn get_word<ReadSeek: Read + Seek>(
         reader: &mut ReadSeek,
-        word: String,
+        word: Option<String>,
     ) -> Result<Option<(String, Vec<u64>)>, Error> {
         let cur_word_len = reader.read_u8()? as usize;
         let mut cur_word_bytes = vec![0; cur_word_len];
@@ -76,25 +69,21 @@ impl IndexedStore {
         let mut cur_word = String::from_utf8(cur_word_bytes).unwrap();
         let mut cur_set_length = reader.read_u64::<LittleEndian>()?;
 
-        if word < cur_word {
-            // move backwards a word, we overstepped and the word isn't here
-            reader.seek(SeekFrom::Current(-9 - cur_word.len() as i64))?;
-            return Ok(None);
-        }
+        if let Some(word) = word {
+            while word > cur_word {
+                reader.seek(SeekFrom::Current(cur_set_length as i64 * 8))?;
+                let cur_word_len = reader.read_u8()? as usize;
+                let mut cur_word_bytes = vec![0; cur_word_len];
+                reader.read_exact(&mut cur_word_bytes)?;
+                cur_word = String::from_utf8(cur_word_bytes).unwrap();
+                cur_set_length = reader.read_u64::<LittleEndian>()?;
+            }
 
-        while word > cur_word {
-            reader.seek(SeekFrom::Current(cur_set_length as i64 * 8))?;
-            let cur_word_len = reader.read_u8()? as usize;
-            let mut cur_word_bytes = vec![0; cur_word_len];
-            reader.read_exact(&mut cur_word_bytes)?;
-            cur_word = String::from_utf8(cur_word_bytes).unwrap();
-            cur_set_length = reader.read_u64::<LittleEndian>()?;
-        }
-
-        if word != cur_word {
-            // move backwards a word, we overstepped and the word isn't here
-            reader.seek(SeekFrom::Current(-9 - cur_word.len() as i64))?;
-            return Ok(None);
+            if word != cur_word {
+                // move backwards a word, we overstepped and the word isn't here
+                reader.seek(SeekFrom::Current(-9 - cur_word.len() as i64))?;
+                return Ok(None);
+            }
         }
 
         let mut word_set = Vec::new();
@@ -131,7 +120,7 @@ impl IndexedStore {
                 }
             }
 
-            match IndexedStore::get_word(&mut file, word.clone()) {
+            match IndexedStore::get_word(&mut file, Some(word.clone())) {
                 Ok(Some((word, set))) => {
                     let _ = word_sets.push((word, set));
                 }
@@ -142,6 +131,64 @@ impl IndexedStore {
         }
 
         Ok(word_sets)
+    }
+
+    pub fn get_all_words(&self) -> Result<Vec<(String, Vec<u64>)>, Error> {
+        let mut file = BufReader::new(File::open(&self.file_path).unwrap());
+        file.seek(SeekFrom::Start(self.content_offset))?;
+
+        let mut word_sets = Vec::new();
+        loop {
+            match IndexedStore::get_word(&mut file, None) {
+                Ok(Some((word, set))) => {
+                    let _ = word_sets.push((word, set));
+                }
+                Err(ref err) if err.kind() == ErrorKind::UnexpectedEof => return Ok(word_sets),
+                Err(err) => Err(err)?,
+                _ => {}
+            }
+        }
+    }
+
+    pub fn get_subset_of_words(
+        &self,
+        start: u64,
+        len: usize,
+    ) -> Result<Vec<(String, Vec<u64>)>, Error> {
+        let mut file = BufReader::new(File::open(&self.file_path).unwrap());
+        file.seek(SeekFrom::Start(self.content_offset))?;
+
+        // the first offset is at position 0, skip it.
+        //
+        // the last offset is an indeterminate number of words after the second to last
+        // one so, we can't use it for word counting
+        let offsets = &self.jump_table[1..self.jump_table.len() - 1];
+
+        let mut word_num = 1;
+        let mut last_offset = 0;
+        for offset in offsets {
+            word_num += self.jump_stride as u64;
+            if word_num > start {
+                file.seek(SeekFrom::Start(self.content_offset + last_offset))?;
+                break;
+            }
+            last_offset = offset.1;
+        }
+        let mut word_sets = Vec::new();
+        while word_sets.len() < len {
+            match IndexedStore::get_word(&mut file, None) {
+                Ok(Some((word, set))) => {
+                    word_num += 1;
+                    if word_num > start {
+                        let _ = word_sets.push((word, set));
+                    }
+                }
+                Err(ref err) if err.kind() == ErrorKind::UnexpectedEof => return Ok(word_sets),
+                Err(err) => Err(err)?,
+                _ => {}
+            }
+        }
+        return Ok(word_sets);
     }
 }
 
@@ -236,11 +283,12 @@ impl IndexedData {
             let elements = words
                 .iter()
                 .cloned()
-                .filter(|x| store.words.binary_search(x).is_ok())
+                .filter(|x| {
+                    &store.jump_table[0].0 < x
+                        && &store.jump_table[store.jump_table.len() - 1].0 > x
+                })
                 .collect::<Vec<_>>();
-            let elements_len = elements.len();
             let elements_map = store.get_words(elements).unwrap();
-            assert_eq!(elements_map.len(), elements_len);
 
             // if a particular word exist in multiple stores, we want to collate the results
             for (word, set) in elements_map {
@@ -261,16 +309,24 @@ fn build_indexed_jump_table(sorted_words: &Vec<(String, Vec<u64>)>) -> Vec<(Stri
     let mut jump_loc = 0u64;
     let mut jump_idx = 0;
 
+    let mut last_word = "";
+    let mut last_loc = 0;
+
     for &(ref word, ref ids) in sorted_words {
         // emit a jump table entry for every JUMP_STRIDE words
         if jump_idx % JUMP_STRIDE == 0 {
             jump_table.push((word.to_string(), jump_loc));
         }
 
+        last_word = word;
+        last_loc = jump_loc;
         // 9 byte header per word: 1 byte for word length + 8 bytes for the set length
         jump_loc += word.len() as u64 + ids.len() as u64 * 8 + 9;
         jump_idx += 1;
     }
+
+    // always ensure the last word in the index is in the jump table
+    jump_table.push((last_word.to_string(), last_loc));
 
     jump_table
 }
@@ -325,6 +381,7 @@ pub fn store_indexed(
 
     // write out the number of entries in the jump table
     indexed_store.write_u64::<LittleEndian>(jump_table.len() as u64)?;
+    indexed_store.write_u32::<LittleEndian>(JUMP_STRIDE)?;
 
     // write out the jump table
     for (word, loc) in jump_table {
@@ -332,18 +389,6 @@ pub fn store_indexed(
         indexed_store.write_u8(word.len() as u8)?;
         indexed_store.write(word)?;
         indexed_store.write_u64::<LittleEndian>(loc)?;
-    }
-
-    // now we need to write out all the words for the HashSet to load initially
-    for &(ref word, _) in &indexed_data {
-        let word = word.as_bytes();
-        assert!(word.len() <= 255);
-
-        // we write out the word length first
-        indexed_store.write_u8(word.len() as u8)?;
-
-        // then write out the word
-        indexed_store.write(word)?;
     }
 
     // now we need to write out each word

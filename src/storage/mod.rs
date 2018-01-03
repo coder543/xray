@@ -152,6 +152,10 @@ impl Storage {
         ).unwrap();
     }
 
+    pub fn num_indexed_stores(&mut self) -> usize {
+        self.indexed_data.stores.len()
+    }
+
     #[allow(unused)]
     pub fn reload(&mut self) {
         *self = Storage::new(self.data_dir.clone(), true);
@@ -165,33 +169,18 @@ impl Storage {
             .filter(|store| store.tag == tag)
             .collect::<Vec<_>>();
 
-        let mut words = stores
-            .iter()
-            .flat_map(|store| store.words.iter())
-            .map(|word| word.to_string())
-            .collect::<Vec<_>>();
+        let words = stores.iter().map(|store| store.num_entries).max().unwrap();
 
-        println!("sorting words");
-        words.par_sort_unstable();
-        words.dedup();
-
-        words
+        (0..words)
+            .collect::<Vec<_>>()
             .par_chunks(chunk_size)
             .enumerate()
             .for_each(|(chunk_num, chunk)| {
-                let mut new_data: Vec<(String, Vec<u64>)> =
-                    chunk.iter().map(|x| (x.clone(), Vec::new())).collect();
-
                 println!("stores.get_words - {}", chunk_num);
                 let store_data = stores
                     .par_iter()
                     .map(|store| {
-                        let store_words = chunk
-                            .iter()
-                            .cloned()
-                            .filter(|word| store.words.binary_search(word).is_ok())
-                            .collect();
-                        let map = match store.get_words(store_words) {
+                        let map = match store.get_subset_of_words(chunk[0], chunk.len()) {
                             Ok(map) => map,
                             Err(err) => {
                                 panic!("store: {}, err: {:?}", store.file_path.display(), err);
@@ -201,6 +190,19 @@ impl Storage {
                     })
                     .collect::<Vec<_>>();
                 println!("aggregating into new_data - {}", chunk_num);
+
+                let all_words = store_data
+                    .iter()
+                    .flat_map(|data| data.iter().map(|&(ref word, _)| word.clone()))
+                    .collect::<Vec<_>>();
+
+                let mut new_data: Vec<(String, Vec<u64>)> = all_words
+                    .into_iter()
+                    .map(|word| (word, Vec::new()))
+                    .collect();
+
+                println!("found {} words", new_data.len());
+
                 for data in store_data {
                     for (word, mut set) in data {
                         match new_data.binary_search_by(|&(ref probe, _)| probe.cmp(&word)) {
@@ -209,6 +211,7 @@ impl Storage {
                         };
                     }
                 }
+
                 println!("persisting data to disk - {}", chunk_num);
                 index_storage::store_indexed(
                     &(tag.to_string() + "_tmp"),

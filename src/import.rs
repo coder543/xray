@@ -134,6 +134,8 @@ impl Database {
             .flat_map(path_to_files)
             .collect::<Vec<_>>();
 
+        let chunk_offset = self.num_stores();
+
         sources
             .chunks(chunk_size)
             .enumerate()
@@ -173,7 +175,7 @@ impl Database {
                     }
 
                     println!("persisting segment {}/{}", i + 1, chunk_len);
-                    temp_db.persist(Some((chunk_num * chunk_size + i) as u64));
+                    temp_db.persist(Some((chunk_num * chunk_size + i + chunk_offset) as u64));
                 });
             });
 

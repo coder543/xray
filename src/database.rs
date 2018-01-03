@@ -59,6 +59,10 @@ impl Database {
         self.storage.rebuild_index()
     }
 
+    pub fn num_stores(&mut self) -> usize {
+        self.storage.num_indexed_stores() / 3
+    }
+
     pub fn query(&mut self, words: Vec<String>, lang: Option<Lang>) {
         let mut words_with_pairs = words
             .into_iter()
