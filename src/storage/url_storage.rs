@@ -2,7 +2,6 @@ use errors::StrError;
 use std::fs::{File, OpenOptions};
 use std::io::{BufReader, BufWriter, Error, ErrorKind, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
-use std::str;
 use std::u64;
 
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
@@ -21,7 +20,8 @@ pub struct UrlStore {
 }
 
 impl UrlStore {
-    fn load(file_path: PathBuf, first_index: u64, num_entries: u64) -> Result<UrlStore, Error> {
+    fn load(file_path: String, first_index: u64, num_entries: u64) -> Result<UrlStore, Error> {
+        let file_path: PathBuf = file_path.into();
         let mut file = BufReader::new(File::open(&file_path)?);
 
         let jump_table_len = file.read_u64::<LittleEndian>()?;
@@ -109,20 +109,20 @@ impl UrlStore {
 pub struct UrlIndex(pub Vec<UrlStore>);
 
 impl UrlIndex {
-    fn load_index(reader: &mut Read, data_dir: &Path) -> Result<UrlStore, Error> {
+    fn load_index(reader: &mut Read) -> Result<UrlStore, Error> {
         let first_index = reader.read_u64::<LittleEndian>()?;
         let num_entries = reader.read_u64::<LittleEndian>()?;
 
         let store_path_len = reader.read_u16::<LittleEndian>()? as usize;
         let mut store_path_bytes = vec![0; store_path_len];
         reader.read_exact(&mut store_path_bytes)?;
-        let file_path = data_dir.join(str::from_utf8(&store_path_bytes).unwrap());
+        let file_path = String::from_utf8(store_path_bytes).unwrap();
 
         UrlStore::load(file_path, first_index, num_entries)
     }
 
-    pub fn load(data_dir: &Path) -> Result<UrlIndex, StrError> {
-        let url_idx_store_path = data_dir.join("urls.xraystore");
+    pub fn load() -> Result<UrlIndex, StrError> {
+        let url_idx_store_path = "urls.xraystore";
         let mut url_idx_store = BufReader::new(
             OpenOptions::new()
                 .read(true)
@@ -131,13 +131,13 @@ impl UrlIndex {
                 .open(&url_idx_store_path)
                 .expect(&format!(
                     "Could not open or create URL storage file {}",
-                    url_idx_store_path.display(),
+                    url_idx_store_path,
                 )),
         );
 
         let mut table_entries = Vec::new();
         loop {
-            match UrlIndex::load_index(&mut url_idx_store, data_dir) {
+            match UrlIndex::load_index(&mut url_idx_store) {
                 Ok(index) => table_entries.push(index),
                 Err(ref err) if err.kind() == ErrorKind::UnexpectedEof => break,
                 Err(err) => Err(err)?,

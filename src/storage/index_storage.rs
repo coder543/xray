@@ -24,7 +24,8 @@ pub struct IndexedStore {
 }
 
 impl IndexedStore {
-    fn load(file_path: PathBuf, tag: String, num_entries: u64) -> Result<IndexedStore, Error> {
+    fn load(file_path: String, tag: String, num_entries: u64) -> Result<IndexedStore, Error> {
+        let file_path: PathBuf = file_path.into();
         let mut file = BufReader::new(File::open(&file_path)?);
 
         // ensure that the index and file agree on how many entries exist
@@ -152,7 +153,7 @@ pub struct IndexedData {
 }
 
 impl IndexedData {
-    fn load_index(reader: &mut Read, data_dir: &Path) -> Result<IndexedStore, Error> {
+    fn load_index(reader: &mut Read) -> Result<IndexedStore, Error> {
         let tag_len = reader.read_u8()? as usize;
         let mut tag = vec![0; tag_len];
         reader.read_exact(&mut tag)?;
@@ -162,13 +163,13 @@ impl IndexedData {
         let store_path_len = reader.read_u16::<LittleEndian>()? as usize;
         let mut store_path_bytes = vec![0; store_path_len];
         reader.read_exact(&mut store_path_bytes)?;
-        let file_path = data_dir.join(str::from_utf8(&store_path_bytes).unwrap());
+        let file_path = String::from_utf8(store_path_bytes).unwrap();
 
         IndexedStore::load(file_path, String::from_utf8(tag).unwrap(), num_entries)
     }
 
-    pub fn load(data_dir: &Path) -> Result<IndexedData, StrError> {
-        let indexed_idx_store_path = data_dir.join("indexed.xraystore");
+    pub fn load() -> Result<IndexedData, StrError> {
+        let indexed_idx_store_path = "indexed.xraystore";
         let mut indexed_idx_store = BufReader::new(
             OpenOptions::new()
                 .read(true)
@@ -177,13 +178,13 @@ impl IndexedData {
                 .open(&indexed_idx_store_path)
                 .expect(&format!(
                     "Could not open or create URL storage file {}",
-                    indexed_idx_store_path.display(),
+                    indexed_idx_store_path,
                 )),
         );
 
         let mut table_entries = Vec::new();
         loop {
-            match IndexedData::load_index(&mut indexed_idx_store, data_dir) {
+            match IndexedData::load_index(&mut indexed_idx_store) {
                 Ok(index) => table_entries.push(index),
                 Err(ref err) if err.kind() == ErrorKind::UnexpectedEof => break,
                 Err(err) => Err(err)?,

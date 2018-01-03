@@ -33,10 +33,12 @@ pub struct Storage {
 
 impl Storage {
     pub fn new<IntoPathBuf: Into<PathBuf>>(data_dir: IntoPathBuf) -> Storage {
+        use std::env::set_current_dir;
         let data_dir = data_dir.into();
+        set_current_dir(&data_dir).unwrap();
 
-        let url_index = UrlIndex::load(&data_dir).unwrap();
-        let indexed_data = IndexedData::load(&data_dir).unwrap();
+        let url_index = UrlIndex::load().unwrap();
+        let indexed_data = IndexedData::load().unwrap();
 
         let mut num_pages = 0;
         for entry in &url_index.0 {
@@ -141,8 +143,6 @@ impl Storage {
         words.sort_unstable();
         words.dedup();
 
-        println!("total words: {}", words.len());
-
         words
             .par_chunks(5_000_000)
             .enumerate()
@@ -151,7 +151,6 @@ impl Storage {
                 let store_data = stores
                     .par_iter()
                     .map(|store| {
-                        println!("  - {} store.get_words", chunk_num);
                         let map = match store.get_words(chunk.to_vec()) {
                             Ok(map) => map,
                             Err(err) => {
@@ -161,7 +160,6 @@ impl Storage {
                         map
                     })
                     .collect::<Vec<_>>();
-                println!("  - {} for loop", chunk_num);
                 for data in store_data {
                     for (word, set) in data {
                         new_data
@@ -170,7 +168,6 @@ impl Storage {
                             .extend(set);
                     }
                 }
-                println!("{} persist chunk", chunk_num);
                 let new_data = new_data.into_iter().collect();
                 index_storage::store_indexed(
                     &(tag.to_string() + "_tmp"),
@@ -204,7 +201,7 @@ impl Storage {
                     // did we find an indexed file?
                     if file_name.starts_with("indexed_") && file_name.ends_with(".xraystore") {
                         let new_name = file_name.replace("_tmp", "");
-                        let mut tag = file_name
+                        let mut tag = new_name
                             .replace("indexed_", "")
                             .chars()
                             .take_while(|&x| !x.is_numeric())
