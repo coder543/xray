@@ -173,18 +173,23 @@ impl IndexedData {
         }
 
         let lang_map = {
-            let lang_store = table_entries.iter().find(|x| x.tag == "by_language");
+            let lang_store = table_entries.iter().filter(|x| x.tag == "by_language");
 
-            match lang_store {
-                Some(lang_store) => lang_store
+            let mut result = HashMap::new();
+            for store in lang_store {
+                let temp = store
                     .get_words(vec![
                         "eng".to_string(),
                         "spa".to_string(),
                         "fra".to_string(),
                     ])
-                    .unwrap(),
-                None => HashMap::new(),
+                    .unwrap();
+                for (lang, set) in temp {
+                    result.entry(lang).or_insert_with(HashSet::new).extend(set)
+                }
             }
+
+            result
         };
 
         Ok(IndexedData {

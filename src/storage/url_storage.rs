@@ -84,7 +84,7 @@ impl UrlStore {
         let mut urls = HashMap::new();
 
         let mut offsets = self.jump_table.iter().cloned().peekable();
-        let mut jump_idx = 0;
+        let mut jump_idx = self.first_index;
         for &idx in url_idxs {
             while idx > jump_idx + self.jump_stride {
                 // if we exceed the jump table + jump_stride, we have been asked to get a URL
