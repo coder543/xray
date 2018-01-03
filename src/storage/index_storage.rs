@@ -150,7 +150,7 @@ pub struct IndexedData {
 }
 
 impl IndexedData {
-    fn load_index(reader: &mut Read) -> Result<IndexedStore, Error> {
+    fn load_index(reader: &mut Read) -> Result<(String, String, u64), Error> {
         let tag_len = reader.read_u8()? as usize;
         let mut tag = vec![0; tag_len];
         reader.read_exact(&mut tag)?;
@@ -162,7 +162,7 @@ impl IndexedData {
         reader.read_exact(&mut store_path_bytes)?;
         let file_path = String::from_utf8(store_path_bytes).unwrap();
 
-        IndexedStore::load(file_path, String::from_utf8(tag).unwrap(), num_entries)
+        Ok((file_path, String::from_utf8(tag).unwrap(), num_entries))
     }
 
     pub fn load() -> Result<IndexedData, StrError> {
@@ -179,13 +179,23 @@ impl IndexedData {
                 )),
         );
 
-        let mut table_entries = Vec::new();
+        let mut indexed_files = Vec::new();
         loop {
             match IndexedData::load_index(&mut indexed_idx_store) {
-                Ok(index) => table_entries.push(index),
+                Ok(index) => indexed_files.push(index),
                 Err(ref err) if err.kind() == ErrorKind::UnexpectedEof => break,
                 Err(err) => Err(err)?,
             }
+        }
+
+        let maybe_table_entries = indexed_files
+            .into_par_iter()
+            .map(|(file_path, tag, num_entries)| IndexedStore::load(file_path, tag, num_entries))
+            .collect::<Vec<_>>();
+
+        let mut table_entries = Vec::new();
+        for entry in maybe_table_entries {
+            table_entries.push(entry?);
         }
 
         let lang_map = {

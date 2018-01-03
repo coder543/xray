@@ -1,4 +1,5 @@
 use std::path::{Path, PathBuf};
+use std::time::Instant;
 use storage::index_storage::append_index;
 
 use rayon::prelude::*;
@@ -6,19 +7,21 @@ use rayon_hash::{HashMap, HashSet};
 use whatlang::Lang;
 
 mod url_storage;
-use errors::StrError;
 use storage::url_storage::UrlIndex;
 
 mod index_storage;
 use storage::index_storage::IndexedData;
 
+use errors::StrError;
+use helpers::ReadableDuration;
+
 const JUMP_STRIDE: u32 = 1000;
 
 #[derive(Clone, Debug, Default)]
 struct ImportProcessing {
-    by_language: HashMap<Lang, HashSet<u64>>,
-    by_word: HashMap<String, HashSet<u64>>,
-    by_title_word: HashMap<String, HashSet<u64>>,
+    by_language: HashMap<Lang, Vec<u64>>,
+    by_word: HashMap<String, Vec<u64>>,
+    by_title_word: HashMap<String, Vec<u64>>,
     urls: HashMap<u64, String>,
 }
 
@@ -37,6 +40,8 @@ impl Storage {
         let data_dir = data_dir.into();
         set_current_dir(&data_dir).unwrap();
 
+        let now = Instant::now();
+
         let url_index = UrlIndex::load().unwrap();
         let indexed_data = IndexedData::load().unwrap();
 
@@ -44,6 +49,8 @@ impl Storage {
         for entry in &url_index.0 {
             num_pages += entry.num_entries;
         }
+
+        println!("loaded stored indices in {}", now.elapsed().readable());
 
         Storage {
             data_dir,
@@ -65,8 +72,8 @@ impl Storage {
         self.import_processing
             .by_language
             .entry(lang)
-            .or_insert_with(HashSet::new)
-            .insert(id);
+            .or_insert_with(Vec::new)
+            .push(id);
 
         self.num_pages += 1;
 
@@ -80,7 +87,7 @@ impl Storage {
             &mut self.import_processing.by_word
         };
 
-        set.entry(word).or_insert_with(HashSet::new).insert(url_id);
+        set.entry(word).or_insert_with(Vec::new).push(url_id);
     }
 
     pub fn next_unique(&self, tag: &str) -> u64 {
@@ -117,7 +124,7 @@ impl Storage {
         url_storage::store_urls(&self.data_dir, &self.import_processing.urls).unwrap();
     }
 
-    pub fn persist_indexed(&self, tag: &str, indexed_data: Vec<(String, HashSet<u64>)>) {
+    pub fn persist_indexed(&self, tag: &str, indexed_data: Vec<(String, Vec<u64>)>) {
         index_storage::store_indexed(
             tag,
             self.next_unique(tag),
@@ -135,6 +142,7 @@ impl Storage {
     }
 
     pub fn optimize_tag(&mut self, tag: &str) -> Result<(), StrError> {
+        println!("optimizing {}", tag);
         let stores = self.indexed_data
             .stores
             .iter()
@@ -147,11 +155,12 @@ impl Storage {
             .map(|word| word.to_string())
             .collect::<Vec<_>>();
 
-        words.sort_unstable();
+        println!("sorting words");
+        words.par_sort_unstable();
         words.dedup();
 
         words
-            .par_chunks(5_000_000)
+            .par_chunks(2_500_000)
             .enumerate()
             .for_each(|(chunk_num, chunk)| {
                 let mut new_data: Vec<(String, Vec<u64>)> = Vec::new();
@@ -159,7 +168,12 @@ impl Storage {
                 let store_data = stores
                     .par_iter()
                     .map(|store| {
-                        let map = match store.get_words(chunk.to_vec()) {
+                        let store_words = chunk
+                            .iter()
+                            .cloned()
+                            .filter(|word| store.words.contains(word))
+                            .collect();
+                        let map = match store.get_words(store_words) {
                             Ok(map) => map,
                             Err(err) => {
                                 panic!("store: {}, err: {:?}", store.file_path.display(), err);
