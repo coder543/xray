@@ -118,8 +118,15 @@ impl Storage {
     }
 
     pub fn persist_indexed(&self, tag: &str, indexed_data: Vec<(String, HashSet<u64>)>) {
-        index_storage::store_indexed(tag, self.next_unique(tag), &self.data_dir, indexed_data)
-            .unwrap();
+        index_storage::store_indexed(
+            tag,
+            self.next_unique(tag),
+            &self.data_dir,
+            indexed_data
+                .into_iter()
+                .map(|(word, data)| (word, data.into_iter().collect()))
+                .collect(),
+        ).unwrap();
     }
 
     #[allow(unused)]
@@ -147,7 +154,8 @@ impl Storage {
             .par_chunks(5_000_000)
             .enumerate()
             .for_each(|(chunk_num, chunk)| {
-                let mut new_data = HashMap::new();
+                let mut new_data: Vec<(String, Vec<u64>)> = Vec::new();
+                println!("stores.get_words - {}", chunk_num);
                 let store_data = stores
                     .par_iter()
                     .map(|store| {
@@ -160,15 +168,16 @@ impl Storage {
                         map
                     })
                     .collect::<Vec<_>>();
+                println!("aggregating into new_data - {}", chunk_num);
                 for data in store_data {
-                    for (word, set) in data {
-                        new_data
-                            .entry(word)
-                            .or_insert_with(HashSet::new)
-                            .extend(set);
+                    for (word, mut set) in data {
+                        match new_data.binary_search_by(|&(ref probe, _)| probe.cmp(&word)) {
+                            Ok(idx) => new_data[idx].1.append(&mut set),
+                            Err(idx) => new_data.insert(idx, (word, set)),
+                        };
                     }
                 }
-                let new_data = new_data.into_iter().collect();
+                println!("persisting data to disk - {}", chunk_num);
                 index_storage::store_indexed(
                     &(tag.to_string() + "_tmp"),
                     chunk_num as u64,

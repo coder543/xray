@@ -67,7 +67,7 @@ impl IndexedStore {
     fn get_word<ReadSeek: Read + Seek>(
         reader: &mut ReadSeek,
         word: String,
-    ) -> Result<Option<(String, HashSet<u64>)>, Error> {
+    ) -> Result<Option<(String, Vec<u64>)>, Error> {
         let cur_word_len = reader.read_u8()? as usize;
         let mut cur_word_bytes = vec![0; cur_word_len];
         reader.read_exact(&mut cur_word_bytes)?;
@@ -95,25 +95,22 @@ impl IndexedStore {
             return Ok(None);
         }
 
-        let mut word_set = HashSet::new();
+        let mut word_set = Vec::new();
 
         for _ in 0..cur_set_length {
-            word_set.insert(reader.read_u64::<LittleEndian>()?);
+            word_set.push(reader.read_u64::<LittleEndian>()?);
         }
 
         Ok(Some((cur_word, word_set)))
     }
 
-    pub fn get_words(
-        &self,
-        mut words: Vec<String>,
-    ) -> Result<HashMap<String, HashSet<u64>>, Error> {
+    pub fn get_words(&self, mut words: Vec<String>) -> Result<Vec<(String, Vec<u64>)>, Error> {
         words.sort_unstable();
         let mut file = BufReader::new(File::open(&self.file_path).unwrap());
 
         file.seek(SeekFrom::Start(self.content_offset))?;
 
-        let mut word_sets = HashMap::new();
+        let mut word_sets = Vec::new();
 
         let mut offsets = self.jump_table.iter().cloned().peekable();
         let mut next_jump_word = offsets.next().unwrap();
@@ -134,7 +131,7 @@ impl IndexedStore {
 
             match IndexedStore::get_word(&mut file, word.clone()) {
                 Ok(Some((word, set))) => {
-                    let _ = word_sets.insert(word, set);
+                    let _ = word_sets.push((word, set));
                 }
                 Err(ref err) if err.kind() == ErrorKind::UnexpectedEof => return Ok(word_sets),
                 Err(err) => Err(err)?,
@@ -244,7 +241,7 @@ impl IndexedData {
     }
 }
 
-fn build_indexed_jump_table(sorted_words: &Vec<(String, HashSet<u64>)>) -> Vec<(String, u64)> {
+fn build_indexed_jump_table(sorted_words: &Vec<(String, Vec<u64>)>) -> Vec<(String, u64)> {
     // ensure that the jump table will always have at least one entry
     let mut jump_table = Vec::new();
     let mut jump_loc = 0u64;
@@ -292,7 +289,7 @@ pub fn store_indexed(
     tag: &str,
     unique: u64,
     data_dir: &Path,
-    mut indexed_data: Vec<(String, HashSet<u64>)>,
+    mut indexed_data: Vec<(String, Vec<u64>)>,
 ) -> Result<(), StrError> {
     if indexed_data.is_empty() {
         return Ok(());
