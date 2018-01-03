@@ -46,7 +46,7 @@ fn load_source(source: PathBuf) -> Result<Vec<(String, Page)>, StrError> {
 
     raw_pages.shrink_to_fit();
 
-    let pages = raw_pages
+    let mut pages = raw_pages
         .into_par_iter()
         .filter_map(|(url, content)| {
             let lang = detect(&content)?.lang();
@@ -66,6 +66,7 @@ fn load_source(source: PathBuf) -> Result<Vec<(String, Page)>, StrError> {
 
             title.sort_unstable();
             title.dedup();
+            title.shrink_to_fit();
 
             let mut words = content
                 .split_whitespace()
@@ -80,6 +81,7 @@ fn load_source(source: PathBuf) -> Result<Vec<(String, Page)>, StrError> {
 
             words.sort_unstable();
             words.dedup();
+            words.shrink_to_fit();
 
             if lang == Lang::Eng || lang == Lang::Spa || lang == Lang::Fra {
                 Some((url, Page { lang, title, words }))
@@ -88,6 +90,8 @@ fn load_source(source: PathBuf) -> Result<Vec<(String, Page)>, StrError> {
             }
         })
         .collect::<Vec<_>>();
+
+    pages.shrink_to_fit();
 
     Ok(pages)
 }
