@@ -1,3 +1,5 @@
+use helpers::add_pairs;
+use helpers::canonicalize;
 use std::fs::File;
 use std::fs::read_dir;
 use std::io::{BufReader, Read};
@@ -48,8 +50,39 @@ fn load_source(source: PathBuf) -> Result<Vec<(String, Page)>, StrError> {
         .into_par_iter()
         .filter_map(|(url, content)| {
             let lang = detect(&content)?.lang();
+            let title_end = content.find('\n').unwrap_or(0);
+            let (mut title, content) = content.split_at(title_end);
+
+            if title.len() > 280 {
+                title = ""; // title is invalid
+            }
+
+            let mut title = title
+                .split_whitespace()
+                .filter_map(canonicalize)
+                .collect::<Vec<_>>();
+
+            add_pairs(&mut title);
+
+            title.sort_unstable();
+            title.dedup();
+
+            let mut words = content
+                .split_whitespace()
+                .filter_map(canonicalize)
+                .collect::<Vec<_>>();
+
+            if words.len() < 10 {
+                return None;
+            }
+
+            add_pairs(&mut words);
+
+            words.sort_unstable();
+            words.dedup();
+
             if lang == Lang::Eng || lang == Lang::Spa || lang == Lang::Fra {
-                Some((url, Page { lang, content }))
+                Some((url, Page { lang, title, words }))
             } else {
                 None
             }

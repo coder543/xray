@@ -130,7 +130,7 @@ impl IndexedStore {
 #[derive(Clone, Debug)]
 pub struct IndexedData {
     pub langs: HashMap<String, HashSet<u64>>,
-    stores: Vec<IndexedStore>,
+    pub stores: Vec<IndexedStore>,
 }
 
 impl IndexedData {
@@ -206,7 +206,14 @@ impl IndexedData {
             let elements_len = elements.len();
             let elements_map = store.get_words(elements).unwrap();
             assert_eq!(elements_map.len(), elements_len);
-            word_map.extend(elements_map);
+
+            // if a particular word exist in multiple stores, we want to collate the results
+            for (word, set) in elements_map {
+                word_map
+                    .entry(word)
+                    .or_insert_with(HashSet::new)
+                    .extend(set);
+            }
         }
 
         word_map
@@ -235,6 +242,7 @@ fn build_indexed_jump_table(sorted_words: &Vec<(String, HashSet<u64>)>) -> Vec<(
 
 pub fn store_indexed(
     tag: &str,
+    unique: u64,
     data_dir: &Path,
     mut indexed_data: Vec<(String, HashSet<u64>)>,
 ) -> Result<(), StrError> {
@@ -246,7 +254,7 @@ pub fn store_indexed(
 
     let jump_table = build_indexed_jump_table(&indexed_data);
 
-    let indexed_store_loc = &format!("indexed_{}.xraystore", tag);
+    let indexed_store_loc = &format!("indexed_{}_{}.xraystore", tag, unique);
     let mut indexed_store = BufWriter::new(File::create(data_dir.join(indexed_store_loc))?);
 
     let mut indexed_idx_store = BufWriter::new(OpenOptions::new()

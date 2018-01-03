@@ -42,3 +42,21 @@ pub fn canonicalize(word: &str) -> Option<String> {
     }
     None
 }
+
+pub fn add_pairs(words: &mut Vec<String>) {
+    if words.is_empty() {
+        return;
+    }
+
+    let mut word_pairs = Vec::new();
+    let mut last_word = words[0].clone();
+    for word in &words[1..] {
+        let word_pair = last_word + "|" + word;
+        if word_pair.as_bytes().len() <= 255 {
+            word_pairs.push(word_pair);
+        }
+        last_word = word.to_string();
+    }
+
+    words.extend(word_pairs);
+}

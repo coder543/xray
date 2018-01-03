@@ -78,6 +78,14 @@ impl Storage {
         set.entry(word).or_insert_with(HashSet::new).insert(url_id);
     }
 
+    pub fn next_unique(&self, tag: &str) -> u64 {
+        self.indexed_data
+            .stores
+            .iter()
+            .filter(|store| store.tag == tag)
+            .count() as u64
+    }
+
     pub fn persist(&mut self) {
         use std::mem::replace;
 
@@ -98,18 +106,18 @@ impl Storage {
             .into_iter()
             .collect();
         self.persist_indexed("by_word", by_word);
-
-        self.reload();
     }
 
     pub fn persist_urls(&mut self) {
         url_storage::store_urls(&self.data_dir, &self.import_processing.urls).unwrap();
     }
 
-    pub fn persist_indexed(&mut self, tag: &str, indexed_data: Vec<(String, HashSet<u64>)>) {
-        index_storage::store_indexed(tag, &self.data_dir, indexed_data).unwrap();
+    pub fn persist_indexed(&self, tag: &str, indexed_data: Vec<(String, HashSet<u64>)>) {
+        index_storage::store_indexed(tag, self.next_unique(tag), &self.data_dir, indexed_data)
+            .unwrap();
     }
 
+    #[allow(unused)]
     pub fn reload(&mut self) {
         *self = Storage::new(self.data_dir.clone());
     }
