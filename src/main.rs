@@ -33,7 +33,7 @@ use storage::Storage;
 #[derive(StructOpt, Debug, Clone)]
 #[structopt(name = "xray")]
 /// xray is a primitive search engine that will one day search the internet
-enum Xray {
+enum XrayCmd {
     #[structopt(name = "interactive")]
     /// Starts in an interactive query mode
     Interactive,
@@ -61,25 +61,37 @@ enum Xray {
     Stats,
 }
 
+#[derive(StructOpt, Debug, Clone)]
+#[structopt(name = "xray")]
+/// xray is a primitive search engine that will one day search the internet
+struct Xray {
+    #[structopt(short = "d", long = "data_dir", default_value = "/mnt/d/tmp/")]
+    /// the data directory to store the indexed data in
+    data_dir: String,
+    #[structopt(subcommand)] command: XrayCmd,
+}
+
 fn main() {
+    use XrayCmd::*;
+
     let args = Xray::from_args();
 
     // rebuild index doesn't actually need to wait around to read the index
-    let load_index = if let &Xray::RebuildIndex = &args {
+    let load_index = if let &RebuildIndex = &args.command {
         false
     } else {
         true
     };
 
-    let storage = Storage::new("/mnt/d/tmp/", load_index);
+    let storage = Storage::new(&args.data_dir, load_index);
     let mut database = Database::new(storage);
-    let result = match args {
-        Xray::Interactive => database.interactive(),
-        Xray::Search { query } => database.search(query),
-        Xray::Import { sources } => database.import(sources),
-        Xray::Optimize { chunk_size } => database.optimize(chunk_size),
-        Xray::RebuildIndex => database.rebuild_index(),
-        Xray::Stats => database.stats(),
+    let result = match args.command {
+        Interactive => database.interactive(),
+        Search { query } => database.search(query),
+        Import { sources } => database.import(sources),
+        Optimize { chunk_size } => database.optimize(chunk_size),
+        RebuildIndex => database.rebuild_index(),
+        Stats => database.stats(),
     };
 
     if let Err(error) = result {
