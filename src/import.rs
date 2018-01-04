@@ -177,18 +177,18 @@ impl Database {
 
                 self.persist_urls();
 
-                results.into_par_iter().enumerate().for_each(|(i, pages)| {
-                    let mut temp_db = self.clone();
+                results.into_iter().enumerate().for_each(|(i, pages)| {
                     println!("processing segment {}/{}", i + 1, chunk_len);
 
                     for (url, page) in pages {
-                        temp_db.insert(url, page)
+                        self.insert(url, page)
                     }
 
-                    println!("persisting segment {}/{}", i + 1, chunk_len);
-                    temp_db.persist(Some((chunk_num * chunk_size + i + chunk_offset) as u64));
                     println!("segment done {}/{}", i + 1, chunk_len);
                 });
+
+                println!("persisting database");
+                self.persist(Some((chunk_num + chunk_offset) as u64));
 
                 println!("segments imported in {}", now.elapsed().readable());
             });
