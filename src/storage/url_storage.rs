@@ -1,7 +1,7 @@
 use errors::StrError;
 use std::fs::{File, OpenOptions};
 use std::io::{BufReader, BufWriter, Error, ErrorKind, Read, Seek, SeekFrom, Write};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::u64;
 
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
@@ -184,7 +184,7 @@ fn build_url_jump_table(sorted_urls: &Vec<(&u64, &String)>) -> Vec<u64> {
     jump_table
 }
 
-pub fn store_urls(data_dir: &Path, urls: &HashMap<u64, String>) -> Result<(), StrError> {
+pub fn store_urls(urls: &HashMap<u64, String>) -> Result<(), StrError> {
     let mut sortable_urls = urls.iter().collect::<Vec<_>>();
     sortable_urls.par_sort_unstable_by_key(|v| v.0);
     if sortable_urls.is_empty() {
@@ -195,11 +195,9 @@ pub fn store_urls(data_dir: &Path, urls: &HashMap<u64, String>) -> Result<(), St
 
     let start_idx = *sortable_urls[0].0 as u64;
     let url_store_loc = &format!("urls_{}.xraystore", start_idx);
-    let mut url_store = BufWriter::new(File::create(data_dir.join(url_store_loc))?);
+    let mut url_store = BufWriter::new(File::create(url_store_loc)?);
 
-    let mut url_idx_store = BufWriter::new(OpenOptions::new()
-        .append(true)
-        .open(data_dir.join("urls.xraystore"))?);
+    let mut url_idx_store = BufWriter::new(OpenOptions::new().append(true).open("urls.xraystore")?);
 
     // write out the starting index for the URLs in this file first
     url_idx_store.write_u64::<LittleEndian>(start_idx)?;

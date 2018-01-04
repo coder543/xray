@@ -70,7 +70,7 @@ enum XrayCmd {
 #[structopt(name = "xray")]
 /// xray is a primitive search engine that will one day search the internet
 struct Xray {
-    #[structopt(short = "d", long = "data_dir", default_value = "/mnt/d/tmp/")]
+    #[structopt(short = "d", long = "data-dir", default_value = "/mnt/d/tmp/")]
     /// the data directory to store the indexed data in
     data_dir: String,
     #[structopt(subcommand)] command: XrayCmd,

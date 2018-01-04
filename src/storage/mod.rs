@@ -37,7 +37,7 @@ pub struct Storage {
 impl Storage {
     pub fn new<IntoPathBuf: Into<PathBuf>>(data_dir: IntoPathBuf, load_indices: bool) -> Storage {
         use std::env::set_current_dir;
-        let data_dir = data_dir.into();
+        let data_dir = ::std::fs::canonicalize(data_dir.into()).unwrap();
         set_current_dir(&data_dir).unwrap();
 
         if !load_indices {
@@ -130,7 +130,7 @@ impl Storage {
     }
 
     pub fn persist_urls(&mut self) {
-        url_storage::store_urls(&self.data_dir, &self.import_processing.urls).unwrap();
+        url_storage::store_urls(&self.import_processing.urls).unwrap();
         self.import_processing.urls = HashMap::new();
     }
 
@@ -144,7 +144,6 @@ impl Storage {
         index_storage::store_indexed(
             tag,
             unique,
-            &self.data_dir,
             indexed_data
                 .into_iter()
                 .map(|(word, data)| (word, data.into_iter().collect()))
@@ -191,17 +190,18 @@ impl Storage {
                     .collect::<Vec<_>>();
                 println!("aggregating into new_data - {}", chunk_num);
 
-                let all_words = store_data
+                let mut all_words = store_data
                     .iter()
                     .flat_map(|data| data.iter().map(|&(ref word, _)| word.clone()))
                     .collect::<Vec<_>>();
+
+                all_words.par_sort_unstable();
+                all_words.dedup();
 
                 let mut new_data: Vec<(String, Vec<u64>)> = all_words
                     .into_iter()
                     .map(|word| (word, Vec::new()))
                     .collect();
-
-                println!("found {} words", new_data.len());
 
                 for data in store_data {
                     for (word, mut set) in data {
@@ -216,7 +216,6 @@ impl Storage {
                 index_storage::store_indexed(
                     &(tag.to_string() + "_tmp"),
                     chunk_num as u64,
-                    &self.data_dir,
                     new_data,
                 ).unwrap();
             });
@@ -266,10 +265,9 @@ impl Storage {
 
         let index = traverse(&self.data_dir)?;
 
-        File::create(self.data_dir.join("indexed.xraystore"))?;
+        File::create("indexed.xraystore")?;
         for (index_path, num_entries, tag) in index {
             append_index(
-                &self.data_dir,
                 &index_path.into_os_string().into_string().unwrap(),
                 &tag,
                 num_entries,

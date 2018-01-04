@@ -332,14 +332,13 @@ fn build_indexed_jump_table(sorted_words: &Vec<(String, Vec<u64>)>) -> Vec<(Stri
 }
 
 pub fn append_index(
-    data_dir: &Path,
     indexed_store_loc: &str,
     tag: &str,
     num_entries: u64,
 ) -> Result<(), Error> {
     let mut indexed_idx_store = BufWriter::new(OpenOptions::new()
         .append(true)
-        .open(data_dir.join("indexed.xraystore"))?);
+        .open("indexed.xraystore")?);
 
     // write out the tag for the indexed store in overall index first
     indexed_idx_store.write_u8(tag.len() as u8)?;
@@ -358,7 +357,6 @@ pub fn append_index(
 pub fn store_indexed(
     tag: &str,
     unique: u64,
-    data_dir: &Path,
     mut indexed_data: Vec<(String, Vec<u64>)>,
 ) -> Result<(), StrError> {
     if indexed_data.is_empty() {
@@ -370,10 +368,10 @@ pub fn store_indexed(
     let jump_table = build_indexed_jump_table(&indexed_data);
 
     let indexed_store_loc = &format!("indexed_{}_{}.xraystore", tag, unique);
-    let mut indexed_store = BufWriter::new(File::create(data_dir.join(indexed_store_loc))?);
+    let mut indexed_store = BufWriter::new(File::create(indexed_store_loc)?);
 
     if !tag.contains("_tmp") {
-        append_index(data_dir, indexed_store_loc, tag, indexed_data.len() as u64)?;
+        append_index(indexed_store_loc, tag, indexed_data.len() as u64)?;
     }
 
     // write out how many words are in this file
