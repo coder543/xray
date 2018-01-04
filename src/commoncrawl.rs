@@ -1,6 +1,6 @@
 use std::str::{self, FromStr};
 
-use nom::{line_ending, IResult};
+use nom::{IResult, line_ending};
 
 /// A struct representing a single WET blob
 #[derive(Copy, Clone, Debug)]

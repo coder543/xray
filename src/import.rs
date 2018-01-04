@@ -8,7 +8,7 @@ use std::time::Instant;
 
 use flate2::read::MultiGzDecoder;
 use rayon::prelude::*;
-use whatlang::{detect, Lang};
+use whatlang::{Lang, detect};
 
 use commoncrawl::{GetWetRef, WetRef};
 use database::Database;
@@ -27,7 +27,9 @@ fn load_source(source: PathBuf) -> Result<Vec<(String, Page)>, StrError> {
         let content = &mut Vec::new();
 
         if is_gzip {
-            MultiGzDecoder::new(BufReader::new(file)).read_to_end(content)?;
+            MultiGzDecoder::new(BufReader::new(file)).read_to_end(
+                content,
+            )?;
         } else {
             file.read_to_end(content)?;
         }
@@ -108,8 +110,8 @@ fn path_to_files(path: String) -> Vec<PathBuf> {
             if let Ok(entry) = entry {
                 let entry = entry.path();
                 let file_name = entry.to_str().unwrap();
-                if entry.is_file()
-                    && (file_name.ends_with(".wet") || file_name.ends_with(".wet.gz"))
+                if entry.is_file() &&
+                    (file_name.ends_with(".wet") || file_name.ends_with(".wet.gz"))
                 {
                     files.push(entry.to_owned());
                 }
@@ -136,10 +138,9 @@ impl Database {
 
         let chunk_offset = self.num_stores();
 
-        sources
-            .chunks(chunk_size)
-            .enumerate()
-            .for_each(|(chunk_num, chunk)| {
+        sources.chunks(chunk_size).enumerate().for_each(
+            |(chunk_num,
+              chunk)| {
                 let chunk_len = chunk.len();
                 let results = chunk
                     .into_par_iter()
@@ -177,7 +178,8 @@ impl Database {
                     println!("persisting segment {}/{}", i + 1, chunk_len);
                     temp_db.persist(Some((chunk_num * chunk_size + i + chunk_offset) as u64));
                 });
-            });
+            },
+        );
 
         let elapsed = now.elapsed().readable();
 

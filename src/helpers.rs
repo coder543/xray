@@ -23,9 +23,9 @@ impl ReadableDuration for Duration {
 
 pub fn is_canonical(x: &char) -> bool {
     let x = *x;
-    !(x == '.' || x == '\'' || x == '?' || x == '!' || x == ',' || x == '(' || x == ')' || x == '$'
-        || x == '&' || x == '[' || x == ']' || x == '\'' || x == '"' || x == ':' || x == ';'
-        || x == '@' || x == '|')
+    !(x == '.' || x == '\'' || x == '?' || x == '!' || x == ',' ||
+          x == '(' || x == ')' || x == '$' || x == '&' || x == '[' || x == ']' || x == '\'' ||
+          x == '"' || x == ':' || x == ';' || x == '@' || x == '|')
 }
 
 pub fn canonicalize(word: &str) -> Option<String> {

@@ -169,7 +169,9 @@ impl IndexedStore {
         for offset in offsets {
             word_num += self.jump_stride as u64;
             if word_num > start {
-                file.seek(SeekFrom::Start(self.content_offset + last_offset))?;
+                file.seek(
+                    SeekFrom::Start(self.content_offset + last_offset),
+                )?;
                 break;
             }
             last_offset = offset.1;
@@ -239,7 +241,9 @@ impl IndexedData {
 
         let maybe_table_entries = indexed_files
             .into_par_iter()
-            .map(|(file_path, tag, num_entries)| IndexedStore::load(file_path, tag, num_entries))
+            .map(|(file_path, tag, num_entries)| {
+                IndexedStore::load(file_path, tag, num_entries)
+            })
             .collect::<Vec<_>>();
 
         let mut table_entries = Vec::new();
@@ -284,18 +288,17 @@ impl IndexedData {
                 .iter()
                 .cloned()
                 .filter(|x| {
-                    &store.jump_table[0].0 < x
-                        && &store.jump_table[store.jump_table.len() - 1].0 > x
+                    &store.jump_table[0].0 < x &&
+                        &store.jump_table[store.jump_table.len() - 1].0 > x
                 })
                 .collect::<Vec<_>>();
             let elements_map = store.get_words(elements).unwrap();
 
             // if a particular word exist in multiple stores, we want to collate the results
             for (word, set) in elements_map {
-                word_map
-                    .entry(word)
-                    .or_insert_with(HashSet::new)
-                    .extend(set);
+                word_map.entry(word).or_insert_with(HashSet::new).extend(
+                    set,
+                );
             }
         }
 
@@ -331,14 +334,9 @@ fn build_indexed_jump_table(sorted_words: &Vec<(String, Vec<u64>)>) -> Vec<(Stri
     jump_table
 }
 
-pub fn append_index(
-    indexed_store_loc: &str,
-    tag: &str,
-    num_entries: u64,
-) -> Result<(), Error> {
-    let mut indexed_idx_store = BufWriter::new(OpenOptions::new()
-        .append(true)
-        .open("indexed.xraystore")?);
+pub fn append_index(indexed_store_loc: &str, tag: &str, num_entries: u64) -> Result<(), Error> {
+    let mut indexed_idx_store =
+        BufWriter::new(OpenOptions::new().append(true).open("indexed.xraystore")?);
 
     // write out the tag for the indexed store in overall index first
     indexed_idx_store.write_u8(tag.len() as u8)?;
@@ -348,7 +346,9 @@ pub fn append_index(
     indexed_idx_store.write_u64::<LittleEndian>(num_entries)?;
 
     // save the file name of this URL store
-    indexed_idx_store.write_u16::<LittleEndian>(indexed_store_loc.len() as u16)?;
+    indexed_idx_store.write_u16::<LittleEndian>(
+        indexed_store_loc.len() as u16,
+    )?;
     indexed_idx_store.write(indexed_store_loc.as_bytes())?;
 
     Ok(())
@@ -375,10 +375,14 @@ pub fn store_indexed(
     }
 
     // write out how many words are in this file
-    indexed_store.write_u64::<LittleEndian>(indexed_data.len() as u64)?;
+    indexed_store.write_u64::<LittleEndian>(
+        indexed_data.len() as u64,
+    )?;
 
     // write out the number of entries in the jump table
-    indexed_store.write_u64::<LittleEndian>(jump_table.len() as u64)?;
+    indexed_store.write_u64::<LittleEndian>(
+        jump_table.len() as u64,
+    )?;
     indexed_store.write_u32::<LittleEndian>(JUMP_STRIDE)?;
 
     // write out the jump table

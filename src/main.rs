@@ -54,7 +54,8 @@ enum XrayCmd {
     #[structopt(name = "optimize")]
     /// Optimizes the database files
     Optimize {
-        #[structopt(long = "chunk-size", default_value = "2500000")] chunk_size: usize,
+        #[structopt(long = "chunk-size", default_value = "2500000")]
+        chunk_size: usize,
     },
 
     #[structopt(name = "rebuild-index")]
@@ -73,7 +74,8 @@ struct Xray {
     #[structopt(short = "d", long = "data-dir", default_value = "/mnt/d/tmp/")]
     /// the data directory to store the indexed data in
     data_dir: String,
-    #[structopt(subcommand)] command: XrayCmd,
+    #[structopt(subcommand)]
+    command: XrayCmd,
 }
 
 fn main() {

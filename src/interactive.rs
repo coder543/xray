@@ -10,13 +10,19 @@ impl Database {
             let readline = rl.readline(">> ");
             match readline {
                 Ok(ref exit) if exit == "exit" => break,
-                Err(ReadlineError::Interrupted) | Err(ReadlineError::Eof) => break,
+                Err(ReadlineError::Interrupted) |
+                Err(ReadlineError::Eof) => break,
                 Err(err) => return Err(format!("{:?}", err))?,
-                Ok(line) => self.search(line.split_whitespace().map(|x| x.into()).collect())?,
+                Ok(line) => {
+                    self.search(
+                        line.split_whitespace().map(|x| x.into()).collect(),
+                    )?
+                }
             }
         }
 
-        //exit the process for now to avoid the slow Drop process for hundreds of thousands of objects
+        // exit the process for now to avoid the slow Drop process for hundreds of
+        // thousands of objects
         ::std::process::exit(0);
     }
 }

@@ -225,7 +225,7 @@ impl Storage {
 
     pub fn rebuild_index(&mut self) -> Result<(), StrError> {
         use byteorder::{LittleEndian, ReadBytesExt};
-        use std::fs::{canonicalize, read_dir, rename, File};
+        use std::fs::{File, canonicalize, read_dir, rename};
 
         fn traverse(path: &Path) -> Result<Vec<(PathBuf, u64, String)>, StrError> {
             let mut results = Vec::new();

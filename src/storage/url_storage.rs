@@ -155,7 +155,9 @@ impl UrlIndex {
         for store in &self.0 {
             let elements = ids.iter()
                 .cloned()
-                .filter(|&x| x >= store.first_index && x < store.first_index + store.num_entries)
+                .filter(|&x| {
+                    x >= store.first_index && x < store.first_index + store.num_entries
+                })
                 .collect::<Vec<_>>();
             urls.extend(store.get_urls(&elements).unwrap());
         }
@@ -203,10 +205,14 @@ pub fn store_urls(urls: &HashMap<u64, String>) -> Result<(), StrError> {
     url_idx_store.write_u64::<LittleEndian>(start_idx)?;
 
     // write out how many URLs are in this file
-    url_idx_store.write_u64::<LittleEndian>(sortable_urls.len() as u64)?;
+    url_idx_store.write_u64::<LittleEndian>(
+        sortable_urls.len() as u64,
+    )?;
 
     // save the file name of this URL store
-    url_idx_store.write_u16::<LittleEndian>(url_store_loc.len() as u16)?;
+    url_idx_store.write_u16::<LittleEndian>(
+        url_store_loc.len() as u16,
+    )?;
     url_idx_store.write(url_store_loc.as_bytes())?;
 
     // write out the number of entries in the jump table
