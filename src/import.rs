@@ -140,7 +140,7 @@ impl Database {
             .for_each(|(chunk_num, chunk)| {
                 let now = Instant::now();
                 let chunk_len = chunk.len();
-                println!("loading {} sources, now importing into database", chunk_len);
+                println!("loading {} sources", chunk_len);
                 let results = chunk
                     .into_par_iter()
                     .cloned()
@@ -176,6 +176,7 @@ impl Database {
 
                     println!("persisting segment {}/{}", i + 1, chunk_len);
                     temp_db.persist(Some((chunk_num * chunk_size + i + chunk_offset) as u64));
+                    println!("segment done {}/{}", i + 1, chunk_len);
                 });
 
                 println!("segments imported in {}", now.elapsed().readable());
