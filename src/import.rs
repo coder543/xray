@@ -8,7 +8,7 @@ use std::time::Instant;
 
 use flate2::read::MultiGzDecoder;
 use rayon::prelude::*;
-use whatlang::{Lang, detect};
+use whatlang::{detect, Lang};
 
 use commoncrawl::{GetWetRef, WetRef};
 use database::Database;
@@ -27,9 +27,7 @@ fn load_source(source: PathBuf) -> Result<Vec<(String, Page)>, StrError> {
         let content = &mut Vec::new();
 
         if is_gzip {
-            MultiGzDecoder::new(BufReader::new(file)).read_to_end(
-                content,
-            )?;
+            MultiGzDecoder::new(BufReader::new(file)).read_to_end(content)?;
         } else {
             file.read_to_end(content)?;
         }
@@ -110,8 +108,8 @@ fn path_to_files(path: String) -> Vec<PathBuf> {
             if let Ok(entry) = entry {
                 let entry = entry.path();
                 let file_name = entry.to_str().unwrap();
-                if entry.is_file() &&
-                    (file_name.ends_with(".wet") || file_name.ends_with(".wet.gz"))
+                if entry.is_file()
+                    && (file_name.ends_with(".wet") || file_name.ends_with(".wet.gz"))
                 {
                     files.push(entry.to_owned());
                 }
@@ -126,11 +124,9 @@ fn path_to_files(path: String) -> Vec<PathBuf> {
 
 impl Database {
     pub fn import(&mut self, sources: Vec<String>, chunk_size: usize) -> Result<(), StrError> {
-        let starting_page_count = self.len();
-
         let now = Instant::now();
 
-        println!("loading sources");
+        println!("loading source list");
         let sources = sources
             .into_par_iter()
             .flat_map(path_to_files)
@@ -138,10 +134,13 @@ impl Database {
 
         let chunk_offset = self.num_stores();
 
-        sources.chunks(chunk_size).enumerate().for_each(
-            |(chunk_num,
-              chunk)| {
+        sources
+            .chunks(chunk_size)
+            .enumerate()
+            .for_each(|(chunk_num, chunk)| {
+                let now = Instant::now();
                 let chunk_len = chunk.len();
+                println!("loading {} sources, now importing into database", chunk_len);
                 let results = chunk
                     .into_par_iter()
                     .cloned()
@@ -149,7 +148,7 @@ impl Database {
                     .map(Result::unwrap)
                     .collect::<Vec<_>>();
 
-                println!("{} sources loaded, now importing into database", chunk_len);
+                println!("sources loaded, now importing into database");
 
                 // sequential segment, generate URL IDs then persist the URL database
                 let mut results = results
@@ -178,16 +177,11 @@ impl Database {
                     println!("persisting segment {}/{}", i + 1, chunk_len);
                     temp_db.persist(Some((chunk_num * chunk_size + i + chunk_offset) as u64));
                 });
-            },
-        );
 
-        let elapsed = now.elapsed().readable();
+                println!("segments imported in {}", now.elapsed().readable());
+            });
 
-        println!(
-            "{} pages imported in {}",
-            self.len() - starting_page_count,
-            elapsed
-        );
+        println!("sources imported in {}", now.elapsed().readable());
 
         Ok(())
     }
