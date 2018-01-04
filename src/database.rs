@@ -21,10 +21,6 @@ impl Database {
         Database { storage }
     }
 
-    pub fn len(&self) -> u64 {
-        self.storage.get_num_pages()
-    }
-
     pub fn insert_url(&mut self, url: String) -> u64 {
         self.storage.insert_url(url)
     }
@@ -71,10 +67,8 @@ impl Database {
 
         add_pairs(&mut words_with_pairs);
 
-        let (title_sets, content_sets) = self.storage.get_word_sets(
-            lang.unwrap_or(Lang::Eng),
-            words_with_pairs,
-        );
+        let (title_sets, content_sets) = self.storage
+            .get_word_sets(lang.unwrap_or(Lang::Eng), words_with_pairs);
 
         if title_sets.is_empty() && content_sets.is_empty() {
             println!("no matches found");
@@ -107,8 +101,8 @@ impl Database {
 
         println!("{} results", len);
 
-        results.iter().for_each(
-            |url_id| println!("{}", result_map[url_id]),
-        );
+        results
+            .iter()
+            .for_each(|url_id| println!("{}", result_map[url_id]));
     }
 }

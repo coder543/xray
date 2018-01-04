@@ -68,10 +68,6 @@ impl Storage {
         }
     }
 
-    pub fn get_num_pages(&self) -> u64 {
-        self.num_pages
-    }
-
     pub fn insert_url(&mut self, url: String) -> u64 {
         let id = self.num_pages;
         self.import_processing.urls.insert(id, url);
@@ -225,7 +221,7 @@ impl Storage {
 
     pub fn rebuild_index(&mut self) -> Result<(), StrError> {
         use byteorder::{LittleEndian, ReadBytesExt};
-        use std::fs::{File, canonicalize, read_dir, rename};
+        use std::fs::{canonicalize, read_dir, rename, File};
 
         fn traverse(path: &Path) -> Result<Vec<(PathBuf, u64, String)>, StrError> {
             let mut results = Vec::new();

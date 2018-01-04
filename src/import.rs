@@ -183,8 +183,6 @@ impl Database {
                     for (url, page) in pages {
                         self.insert(url, page)
                     }
-
-                    println!("segment done {}/{}", i + 1, chunk_len);
                 });
 
                 println!("persisting database");
