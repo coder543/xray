@@ -45,7 +45,7 @@ enum XrayCmd {
     #[structopt(name = "import")]
     /// Imports raw CommonCrawl data into xray
     Import {
-        #[structopt(long = "chunk-size", default_value = "24")]
+        #[structopt(long = "chunk-size", default_value = "36")]
         /// The number of import files to be processed in parallel
         chunk_size: usize,
         sources: Vec<String>,
@@ -55,6 +55,7 @@ enum XrayCmd {
     /// Optimizes the database files
     Optimize {
         #[structopt(long = "chunk-size", default_value = "2500000")]
+        /// The number of words per optimization chunk
         chunk_size: usize,
     },
 
@@ -74,8 +75,8 @@ struct Xray {
     #[structopt(short = "d", long = "data-dir", default_value = "/mnt/d/tmp/")]
     /// the data directory to store the indexed data in
     data_dir: String,
-    #[structopt(subcommand)]
-    command: XrayCmd,
+
+    #[structopt(subcommand)] command: XrayCmd,
 }
 
 fn main() {
