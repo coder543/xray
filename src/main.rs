@@ -14,6 +14,7 @@ extern crate whatlang;
 use structopt::StructOpt;
 
 use std::process::exit;
+use std::mem::discriminant;
 
 mod errors;
 mod helpers;
@@ -85,14 +86,10 @@ fn main() {
     let args = Xray::from_args();
 
     // rebuild index doesn't actually need to wait around to read the index
-    let load_index = if let &RebuildIndex = &args.command {
-        false
-    } else {
-        true
-    };
-
+    let load_index = discriminant(&RebuildIndex) != discriminant(&args.command);
     let storage = Storage::new(&args.data_dir, load_index);
     let mut database = Database::new(storage);
+
     let result = match args.command {
         Interactive => database.interactive(),
         Search { query } => database.search(query),
