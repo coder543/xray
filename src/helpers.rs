@@ -1,5 +1,3 @@
-#[allow(unused)]
-use std::ascii::AsciiExt;
 use std::time::Duration;
 
 pub trait ReadableDuration {
