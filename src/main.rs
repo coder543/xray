@@ -1,4 +1,3 @@
-extern crate brotli;
 extern crate byteorder;
 extern crate flate2;
 #[macro_use]
@@ -7,8 +6,6 @@ extern crate rayon;
 extern crate rayon_hash;
 extern crate rustyline;
 extern crate structopt;
-#[macro_use]
-extern crate structopt_derive;
 extern crate whatlang;
 
 use structopt::StructOpt;

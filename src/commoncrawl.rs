@@ -1,6 +1,6 @@
 use std::str::{self, FromStr};
 
-use nom::{IResult, line_ending};
+use nom::character::complete::line_ending;
 
 /// A struct representing a single WET blob
 #[derive(Copy, Clone, Debug)]
@@ -30,9 +30,8 @@ pub trait GetWetRef<'a> {
 impl<'a> GetWetRef<'a> for [u8] {
     fn next_wet_ref(&'a self) -> (WetRef<'a>, &'a [u8]) {
         match parse_wet_ref(self) {
-            IResult::Done(rem, val) => (val, rem),
-            IResult::Error(err) => panic!(format!("{:?}", err)),
-            IResult::Incomplete(_) => panic!(),
+            Result::Ok((rem, val)) => (val, rem),
+            Result::Err(err) => panic!("{:?}", err),
         }
     }
 }
